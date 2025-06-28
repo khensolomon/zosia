@@ -1,0 +1,6 @@
+# config/default_config.yaml
+# This file can be used for global settings or to inherit from for other configs.
+
+# General project settings
+project_name: "zosia"
+base_output_dir: "experiments"

@@ -1,0 +1,28 @@
+# Paths for raw data files relative to the project root
+raw_data_dir: "data/raw"
+# New: Path to the YAML catalog file defining raw parallel data sources
+raw_data_catalog_file: "base_training.yaml" # Path relative to raw_data_dir
+
+# Monolingual data configuration
+monolingual_data_dir: "data/monolingual" # Base dir for monolingual data
+monolingual_zo_index_file: "zo/index.csv" # Path to Zomi monolingual index, relative to monolingual_data_dir
+monolingual_en_file: "monolingual_en.txt" # Still can list single files directly if convenient, or add to index.csv
+
+# Paths for processed data and vocabulary files
+processed_data_dir: "data/processed"
+vocab_dir: "data/vocab"
+tokenizer_prefix: "zosia_sp" # Prefix for SentencePiece model and vocab files
+
+# Data processing parameters
+max_sequence_length: 128 # Maximum length for tokenized sequences. Sentences longer than this will be truncated.
+vocab_size: 100 # Example vocab size, adjust as needed
+min_token_count: 3       # Minimum number of tokens for a sentence to be included.
+max_token_count: 120     # Maximum number of tokens for a sentence to be included (pre-truncation filter).
+strip_whitespace: True
+lowercase: False         # Set to True if you want to lowercase all text
+normalize_punctuation: True
+remove_duplicates: True
+# Add any other data specific configurations here, e.g., filtering criteria
+# data_source_filter: ["manual_translation", "web_scrape"] # Example of a customizable filter
+
+# Tokenizer settings: sp_model_path is now derived from vocab_dir and tokenizer_prefix in code

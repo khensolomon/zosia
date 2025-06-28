@@ -1,0 +1,11 @@
+torch
+torchvision
+torchaudio
+sentencepiece
+pyyaml
+tqdm
+sacrebleu
+wandb # Optional, only if you plan to use Weights & Biases
+pandas
+
+pytest # is an excellent choice for Python testing. It's flexible, powerful, and widely adopted.
