@@ -21,5 +21,5 @@ save_best_model: True # Save only the model with the best validation BLEU score
 experiment_name_prefix: "nmt_run" # Prefix for experiment folder in 'experiments/'
 # Use wandb: True/False to enable/disable Weights & Biases logging
 use_wandb: True
-wandb_project_name: "ZoTranslate_NMT"
+wandb_project_name: "ZoSia_NMT"
 wandb_entity: "your_wandb_username" # Replace with your Weights & Biases username
