@@ -1,4 +1,4 @@
-# zosia: Zo-English Neural Machine Translation (NMT) System
+# ZOSIA: ZO-EN Neural Machine Translation (NMT) System
 
 ## Project Goal
 
@@ -14,7 +14,7 @@ To develop a robust and customizable neural machine translation system capable o
 
 ## Table of Contents
 
-- [zosia: Zo-English Neural Machine Translation (NMT) System](#zosia-zo-english-neural-machine-translation-nmt-system)
+- [ZOSIA: ZO-EN Neural Machine Translation (NMT) System](#zosia-zo-en-neural-machine-translation-nmt-system)
   - [Project Goal](#project-goal)
   - [Features](#features)
   - [Table of Contents](#table-of-contents)
