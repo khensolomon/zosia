@@ -13,8 +13,8 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/yourusername/zosia" # Replace with your repo URL
-"Bug Tracker" = "https://github.com/yourusername/zosia/issues"
+"Homepage" = "https://github.com/khensolomon/zosia" # Replace with your repo URL
+"Bug Tracker" = "https://github.com/khensolomon/zosia/issues"
 
 [tool.setuptools]
 packages = ["src"] # Tell setuptools to find packages in 'src'

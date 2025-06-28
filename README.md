@@ -102,4 +102,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 8. Contact
 
-For questions or collaborations, please reach out to [khensolomon@gmail.com].
+For questions or collaborations, please reach out to [issues](https://github.com/khensolomon/zosia/issues).

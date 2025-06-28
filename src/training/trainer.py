@@ -278,7 +278,7 @@ def main():
     if use_wandb:
         try:
             import wandb
-            wandb.init(project=training_config.get("wandb_project_name", "ZoTranslate_NMT"),
+            wandb.init(project=training_config.get("wandb_project_name", "ZoSia_NMT"),
                        entity=training_config.get("wandb_entity", None),
                        config={**training_config, **model_config, **data_config},
                        name=f"{exp_name_prefix}_{timestamp}",
