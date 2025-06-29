@@ -1,24 +1,55 @@
 #!/bin/bash
+# -----------------------------------------------------------------------------
+# Script: preprocess_data.sh
+#
+# Description:
+#   This script orchestrates the data preprocessing pipeline. It now accepts
+#   language direction arguments to align with the training script.
+#
+# Usage:
+#   Run this script from the root directory of the project.
+#
+#   To preprocess for en -> zo (default):
+#   bash scripts/preprocess_data.sh
+#
+#   To preprocess for zo -> en:
+#   bash scripts/preprocess_data.sh --src zo --tgt en
+# -----------------------------------------------------------------------------
 
-# Script to preprocess the data for the Zosia NMT project.
-# This typically involves:
-# 1. Training the SentencePiece tokenizer on raw data.
-# 2. Tokenizing the raw text files into numerical IDs.
-# 3. Saving the tokenized data in a format suitable for PyTorch DataLoaders.
+# --- Configuration ---
+set -e
+SRC_LANG="en"
+TGT_LANG="zo"
 
-echo "--- Starting Data Preprocessing for Zosia ---"
+# --- Argument Parsing ---
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --src) SRC_LANG="$2"; shift ;;
+        --tgt) TGT_LANG="$2"; shift ;;
+        *) echo "Unknown parameter passed: $1"; exit 1 ;;
+    esac
+    shift
+done
 
-# Ensure the 'data' directory and its subdirectories exist if your make_dataset.py doesn't create them.
-# Usually, make_dataset.py handles this, but it's good to be aware.
-# mkdir -p data/raw data/processed data/vocab
+# --- Script Body ---
+echo "============================================="
+echo "  Starting ZoSia Data Preprocessing Pipeline "
+echo "        Direction: ${SRC_LANG} -> ${TGT_LANG}"
+echo "============================================="
+echo
 
-# Execute the make_dataset.py module to run the preprocessing pipeline.
-# It should read configurations from config/data_config.yaml.
-python -m src.data.make_dataset --data_config config/data_config.yaml
+# Step 1: Train Tokenizers (This is direction-agnostic and only needs to be run once)
+echo "[Step 1/2] Training tokenizers..."
+python -m src.tokenizers.builder
+echo "✅ Tokenizers trained successfully."
+echo
 
-if [ $? -eq 0 ]; then
-    echo "--- Data Preprocessing Completed Successfully ---"
-else
-    echo "--- Data Preprocessing Failed ---"
-    exit 1
-fi
+# Step 2: Process and Split Datasets for the specified direction
+echo "[Step 2/2] Processing and splitting datasets..."
+python -m src.dataset.builder --src_lang "${SRC_LANG}" --tgt_lang "${TGT_LANG}"
+echo "✅ Datasets processed and split successfully."
+echo
+
+echo "============================================="
+echo "     Preprocessing Pipeline Complete!        "
+echo "============================================="

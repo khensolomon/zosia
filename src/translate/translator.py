@@ -1,130 +1,170 @@
-import torch
-import sentencepiece as spm
-import os
+# -----------------------------------------------------------------------------
+# File: src/translate/translator.py
+#
+# Description:
+#   This script translates a sentence using a trained model. It now accepts a
+#   --config-dir argument to make it fully testable.
+# -----------------------------------------------------------------------------
+
+import yaml
 import argparse
-from src.models.transformer_model import Transformer, Encoder, Decoder # Assuming these are defined in transformer_model.py
-from src.utils.general_utils import load_config, get_device, load_checkpoint
-from src.utils.logger import get_logger
+import torch
+import torch.nn.functional as F
+from pathlib import Path
+import re
 
-logger = get_logger(__name__)
+# --- Local Imports ---
+from src.models.transformer import build_transformer
+from tokenizers import Tokenizer
 
-def translate_sentence(sentence: str,
-                       model: Transformer,
-                       sp_model: spm.SentencePieceProcessor,
-                       device: torch.device,
-                       max_output_len: int = 50):
+def load_config(config_dir: Path):
     """
-    Translates a single source sentence using the trained Transformer model
-    with greedy decoding.
+    Loads all .yaml files from a given config directory, merges them,
+    and robustly resolves all nested ${group.key} placeholders.
     """
-    model.eval() # Set model to evaluation mode
+    config = {}
+    for config_file in sorted(config_dir.glob('*.yaml')):
+        with open(config_file, 'r', encoding='utf-8') as f:
+            content = yaml.safe_load(f)
+            if content:
+                for key, value in content.items():
+                    if key in config and isinstance(config[key], dict) and isinstance(value, dict):
+                        config[key].update(value)
+                    else:
+                        config[key] = value
 
-    # 1. Tokenize the input sentence
-    # sp_model.encode_as_ids() returns a list of integer IDs
-    src_tokens_ids = sp_model.encode_as_ids(sentence)
+    config_str = yaml.dump(config)
+    for _ in range(5):
+        placeholders = set(re.findall(r'\$\{(.*?)\}', config_str))
+        if not placeholders: break
+        for p_str in placeholders:
+            if p_str == 'paths.root':
+                root_path_val = str(Path(config['paths']['root']).resolve())
+                config_str = config_str.replace(f'${{{p_str}}}', root_path_val)
+                continue
+            try:
+                lookup_config = yaml.safe_load(config_str)
+                group, key = p_str.split('.')
+                value = lookup_config.get(group, {}).get(key)
+                if isinstance(value, str) and not re.search(r'\$\{(.*?)\}', value):
+                    config_str = config_str.replace(f'${{{p_str}}}', value)
+            except (ValueError, KeyError): continue
+        config = yaml.safe_load(config_str)
+    
+    return config
 
-    # 2. Add Start-of-Sentence (SOS) and End-of-Sentence (EOS) tokens
-    # Ensure sp_model.bos_id() and sp_model.eos_id() are correctly mapped in your data pipeline
-    src_tokens_ids = [sp_model.bos_id()] + src_tokens_ids + [sp_model.eos_id()]
+def _generate_subsequent_mask(size, device):
+    """Generates a square boolean mask for the target sequence."""
+    mask = torch.tril(torch.ones(size, size, device=device)).bool()
+    return mask
 
-    # 3. Convert to PyTorch tensor and add batch dimension
-    src_tensor = torch.LongTensor(src_tokens_ids).unsqueeze(0).to(device)
+def beam_search_decode(model, src_tensor, src_mask, tgt_tokenizer, device, max_len, beam_size, alpha):
+    """Performs beam search decoding with length penalty."""
+    sos_id = tgt_tokenizer.token_to_id("[SOS]")
+    eos_id = tgt_tokenizer.token_to_id("[EOS]")
 
-    # 4. Create source mask (required by the Transformer)
-    src_mask = model.make_src_mask(src_tensor)
-
-    # 5. Encode the source sentence
     with torch.no_grad():
-        enc_src = model.encoder(src_tensor, src_mask)
+        encoder_output = model.encode(src_tensor, src_mask)
+        
+        hypotheses = [(torch.tensor([[sos_id]], device=device), 0.0)]
+        completed_hypotheses = []
 
-    # 6. Initialize the target sequence with SOS token
-    trg_indexes = [sp_model.bos_id()]
-    trg_tensor = torch.LongTensor(trg_indexes).unsqueeze(0).to(device) # Shape: [1, 1]
+        for _ in range(max_len):
+            if not hypotheses or len(completed_hypotheses) >= beam_size:
+                break
 
-    # 7. Decode token by token using greedy search
-    for i in range(max_output_len):
-        trg_mask = model.make_trg_mask(trg_tensor) # Mask for current target sequence
+            all_candidates = []
+            
+            for seq, score in hypotheses:
+                tgt_mask = _generate_subsequent_mask(seq.size(1), device).unsqueeze(0).unsqueeze(0)
+                out = model.decode(encoder_output, src_mask, seq, tgt_mask)
+                log_probs = F.log_softmax(model.project(out[:, -1]), dim=-1)
+                
+                top_scores, top_ids = torch.topk(log_probs, beam_size, dim=1)
 
-        with torch.no_grad():
-            output = model.decoder(trg_tensor, enc_src, trg_mask, src_mask)
+                for i in range(beam_size):
+                    next_id = top_ids[0, i].item()
+                    new_score = score + top_scores[0, i].item()
+                    new_seq = torch.cat([seq, torch.tensor([[next_id]], device=device)], dim=1)
+                    all_candidates.append((new_seq, new_score))
+            
+            ordered = sorted(all_candidates, key=lambda x: x[1], reverse=True)
+            hypotheses = []
 
-        # Get the next predicted token (argmax over vocabulary dimension)
-        pred_token_id = output.argmax(2)[:, -1].item()
-
-        # Append the predicted token to the target sequence
-        trg_indexes.append(pred_token_id)
-        trg_tensor = torch.LongTensor(trg_indexes).unsqueeze(0).to(device)
-
-        # Check if EOS token is predicted
-        if pred_token_id == sp_model.eos_id():
-            break
-
-    # 8. Decode the sequence of token IDs back to a human-readable string
-    # Remove SOS, EOS, and PAD tokens for clean output
-    translated_tokens_ids = [idx for idx in trg_indexes if idx not in [sp_model.bos_id(), sp_model.eos_id(), sp_model.pad_id()]]
-    translated_sentence = sp_model.decode(translated_tokens_ids)
-
-    return translated_sentence
+            for seq, score in ordered:
+                if seq[0, -1].item() == eos_id:
+                    lp = ((5 + seq.size(1)) ** alpha) / ((5 + 1) ** alpha)
+                    completed_hypotheses.append((seq, score / lp))
+                else:
+                    hypotheses.append((seq, score))
+                
+                if len(hypotheses) == beam_size:
+                    break
+        
+        if not completed_hypotheses:
+            completed_hypotheses.extend(hypotheses)
+            
+    if not completed_hypotheses:
+        return torch.tensor([[]], device=device, dtype=torch.long)
+        
+    best_hypothesis = sorted(completed_hypotheses, key=lambda x: x[1], reverse=True)[0]
+    return best_hypothesis[0]
 
 def main():
-    parser = argparse.ArgumentParser(description="Translate a sentence using a trained Transformer NMT model.")
-    parser.add_argument("--checkpoint_path", type=str, required=True,
-                        help="Path to the model checkpoint (.pt file) to load.")
-    parser.add_argument("--sentence", type=str, required=True,
-                        help="The sentence to translate.")
+    """Main function to handle argument parsing and translation."""
+    parser = argparse.ArgumentParser(description="ZoSia Translator")
+    parser.add_argument('--config-dir', type=str, default='./config', help="Path to the configuration directory.")
+    parser.add_argument('--model_file', type=str, required=True, help="Path to the trained model checkpoint")
+    parser.add_argument('--text', type=str, required=True, help="The text sentence to translate.")
+    parser.add_argument('--src_lang', type=str, required=True, help="Source language code")
+    parser.add_argument('--tgt_lang', type=str, required=True, help="Target language code")
+    parser.add_argument('--beam_size', type=int, default=1, help="Beam size for decoding. 1 for greedy.")
+    parser.add_argument('--alpha', type=float, default=0.6, help="Length penalty alpha. 0 for no penalty.")
     args = parser.parse_args()
 
-    device = get_device()
-    logger.info(f"Using device: {device}")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    cfg = load_config(Path(args.config_dir))
+    model_cfg = cfg['model']
 
-    # Load checkpoint
-    logger.info(f"Loading checkpoint from: {args.checkpoint_path}")
-    checkpoint = load_checkpoint(args.checkpoint_path, device)
+    try:
+        tokenizer_path = Path(cfg['data_paths']['tokenizers'])
+        src_tokenizer = Tokenizer.from_file(str(tokenizer_path / cfg['tokenizer']['tokenizer_file'].format(lang=args.src_lang)))
+        tgt_tokenizer = Tokenizer.from_file(str(tokenizer_path / cfg['tokenizer']['tokenizer_file'].format(lang=args.tgt_lang)))
+    except Exception as e:
+        print(f"[ERROR] Error loading tokenizers: {e}")
+        return
 
-    # Reconstruct model and tokenizer based on saved configs
-    model_config = checkpoint['model_config']
-    data_config = checkpoint['data_config']
-    sp_model_path = checkpoint['sp_model_path']
+    src_pad_id = src_tokenizer.token_to_id("[PAD]")
+    tgt_pad_id = tgt_tokenizer.token_to_id("[PAD]")
 
-    # Load SentencePiece tokenizer
-    sp_model = spm.SentencePieceProcessor(model_file=sp_model_path)
-    src_pad_idx = sp_model.pad_id()
-    trg_pad_idx = sp_model.pad_id()
-    trg_output_dim = sp_model.get_piece_size()
+    model = build_transformer(
+        src_tokenizer.get_vocab_size(), tgt_tokenizer.get_vocab_size(),
+        src_pad_id, tgt_pad_id,
+        model_cfg['d_model'], model_cfg['num_encoder_layers'], model_cfg['num_decoder_layers'],
+        model_cfg['num_heads'], model_cfg['d_ff'], model_cfg['dropout'], model_cfg['max_seq_len']
+    ).to(device)
 
-    # Initialize model with correct parameters
-    enc = Encoder(input_dim=sp_model.get_piece_size(),
-                  hid_dim=model_config["hidden_dim"],
-                  n_layers=model_config["enc_layers"],
-                  n_heads=model_config["enc_heads"],
-                  pf_dim=model_config["enc_pf_dim"],
-                  dropout=model_config["enc_dropout"],
-                  max_seq_len=model_config["max_seq_len"],
-                  device=device)
-
-    dec = Decoder(output_dim=trg_output_dim,
-                  hid_dim=model_config["hidden_dim"],
-                  n_layers=model_config["dec_layers"],
-                  n_heads=model_config["dec_heads"],
-                  pf_dim=model_config["dec_pf_dim"],
-                  dropout=model_config["dec_dropout"],
-                  max_seq_len=model_config["max_seq_len"],
-                  device=device)
-
-    model = Transformer(enc, dec, src_pad_idx, trg_pad_idx, device).to(device)
-
-    # Load model state dict
+    checkpoint = torch.load(args.model_file, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
-    logger.info("Model state loaded.")
+    print("[OK] Model checkpoint loaded successfully.")
 
-    # Translate the sentence
-    input_sentence = args.sentence
-    logger.info(f"Input Sentence: \"{input_sentence}\"")
+    src_encoded = src_tokenizer.encode(args.text)
+    src_tensor = torch.tensor(src_encoded.ids, dtype=torch.long).unsqueeze(0).to(device)
+    src_mask = (src_tensor != src_pad_id).unsqueeze(1).unsqueeze(2).to(device)
 
-    translated_sentence = translate_sentence(input_sentence, model, sp_model, device)
+    output_seq = beam_search_decode(
+        model, src_tensor, src_mask,
+        tgt_tokenizer, device,
+        model_cfg['max_seq_len'], args.beam_size, args.alpha
+    )
 
-    logger.info(f"Translated Sentence: \"{translated_sentence}\"")
-    logger.info("Translation complete.")
+    translated_text = tgt_tokenizer.decode(output_seq.squeeze(0).tolist(), skip_special_tokens=True).strip()
+    
+    print("---------------------------------------------")
+    if translated_text:
+        print(f"Translation: {translated_text}")
+    else:
+        print("Translation: (Empty)")
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

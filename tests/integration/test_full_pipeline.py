@@ -1,255 +1,115 @@
-# tests/integration/test_full_pipeline.py
+# -----------------------------------------------------------------------------
+# File: tests/integration/test_full_pipeline.py
+#
+# Description:
+#   This file contains an integration test for the entire project pipeline.
+#   It now calls the Python modules directly and uses a dedicated config
+#   directory for a clean, isolated, and cross-platform test run.
+#
+# Usage:
+#   Run tests from the root directory of the project using pytest:
+#   `pytest tests/integration`
+# -----------------------------------------------------------------------------
 
+import subprocess
 import pytest
-import torch
-import sentencepiece as spm
-import os
-import yaml
 from pathlib import Path
-
-# Corrected imports based on your transformer_model.py
-from src.models.transformer_model import Transformer, Encoder, Decoder # Also need Encoder, Decoder for instantiation
-
-
-# --- Fixtures for integration tests ---
+import yaml
+import shutil
+import sys
 
 @pytest.fixture(scope="module")
-def project_root():
-    """Provides the path to the project root directory."""
-    # This assumes you run pytest from the project root or configure pytest.ini
-    return Path(__file__).parent.parent.parent
-
-@pytest.fixture(scope="module")
-def device():
-    """Provides a torch device (CPU for testing simplicity)."""
-    return torch.device('cpu')
-
-@pytest.fixture(scope="module")
-def dummy_data_dir(tmp_path_factory, device): # Add device here
-    """Creates a temporary directory and dummy config/data files for testing."""
-    temp_dir = tmp_path_factory.mktemp("dummy_nmt_data")
-
-    # Create dummy data_config.yaml
-    data_config_content = f"""
-    raw_data_dir: {temp_dir}/raw
-    processed_data_dir: {temp_dir}/processed
-    sp_model_dir: {temp_dir}/sp_models
-    source_language: zo
-    target_language: en
-    vocab_size: 58 # Small vocab for testing
-    max_seq_len: 50
+def setup_test_environment():
     """
-
-    (temp_dir / "config").mkdir(exist_ok=True)
-    data_config_path = temp_dir / "config" / "data_config.yaml"
-    data_config_path.write_text(data_config_content)
-
-    # Create dummy raw data files (very small)
-    (temp_dir / "raw").mkdir(exist_ok=True)
-    (temp_dir / "raw" / "train.zo").write_text("Hello world.\nThis is a test.\n")
-    (temp_dir / "raw" / "train.en").write_text("Hello world.\nThis is a test.\n")
-    (temp_dir / "raw" / "val.zo").write_text("Test sentence.\n")
-    (temp_dir / "raw" / "val.en").write_text("Test sentence.\n")
-
-    # Create a dummy model_config.yaml (adjusting to match your Transformer's __init__ args implicitly)
-    model_config_content = """
-    hid_dim: 128
-    n_heads: 8
-    num_encoder_layers: 2
-    num_decoder_layers: 2
-    pf_dim: 512
-    dropout: 0.1
-    max_seq_len: 50
-    src_vocab_size: 58 # Corrected to match data_config vocab_size
-    tgt_vocab_size: 58 # Corrected to match data_config vocab_size
-    src_pad_idx: 0 # Assuming 0 for SentencePiece pad_id
-    trg_pad_idx: 0 # Assuming 0 for SentencePiece pad_id
+    A pytest fixture to set up a temporary, isolated environment for testing.
+    This runs once per test module.
     """
-    model_config_path = temp_dir / "config" / "model_config.yaml"
-    model_config_path.write_text(model_config_content)
-
-
-    # Create a dummy SentencePiece model for testing
-    sp_model_dir = temp_dir / "sp_models"
-    sp_model_dir.mkdir(exist_ok=True)
-    sp_model_prefix = str(sp_model_dir / "zosia_sp")
-    spm.SentencePieceTrainer.train(
-        input=str(temp_dir / "raw" / "train.zo"),
-        model_prefix=sp_model_prefix,
-        vocab_size=58, # Matches config
-        model_type="bpe"
-    )
+    test_root = Path("./tests/temp_test_env").resolve()
     
-    yield temp_dir # Provide the path to the dummy data
+    if test_root.exists():
+        shutil.rmtree(test_root)
+        
+    paths = {
+        "root": test_root,
+        "config": test_root / "config",
+        "data": test_root / "data",
+        "parallel": test_root / "data" / "parallel_base",
+        "monolingual": test_root / "data" / "monolingual" / "zo",
+        "experiments": test_root / "experiments",
+    }
+    for path in paths.values():
+        path.mkdir(parents=True, exist_ok=True)
 
-@pytest.fixture(scope="module")
-def trained_model_path(dummy_data_dir, device): # Add device here
-    """Creates a dummy trained model file for testing."""
-    model_config_path = dummy_data_dir / "config" / "model_config.yaml"
-    with open(model_config_path, 'r') as f:
-        config = yaml.safe_load(f)
+    # --- Create dummy data and index files ---
+    # FIX: Added a third sentence to ensure the train split is not empty.
+    (paths["parallel"] / "test.en").write_text(
+        "this is a test.\nanother test sentence.\na third line for splitting."
+    )
+    (paths["parallel"] / "test.zo").write_text(
+        "hih pen test khat ahi.\nkammal test dang khat.\na thumna pan ding."
+    )
+    (paths["parallel"] / "index.yaml").write_text(yaml.dump({"corpora": ["test"]}))
+    (paths["monolingual"] / "mono.zo").write_text("leitung a nuam.")
+    (paths["monolingual"] / "index.yaml").write_text(yaml.dump({"files": ["mono.zo"]}))
 
-    # Instantiate Encoder and Decoder with device
-    encoder = Encoder(
-        input_dim=config['src_vocab_size'],
-        hid_dim=config['hid_dim'],
-        n_layers=config['num_encoder_layers'],
-        n_heads=config['n_heads'],
-        pf_dim=config['pf_dim'],
-        dropout=config['dropout'],
-        max_seq_len=config['max_seq_len'],
-        device=device
-    ).to(device)
+    # --- Create temporary config files that point to our temp directories ---
+    project_config_dir = Path("./config").resolve()
+    for config_file in project_config_dir.glob("*.yaml"):
+        with open(config_file, 'r') as f:
+            # Use as_posix() for cross-platform path compatibility in YAML
+            content = f.read().replace('root: "."', f'root: "{paths["root"].as_posix()}"')
+            (paths["config"] / config_file.name).write_text(content)
 
-    decoder = Decoder(
-        output_dim=config['tgt_vocab_size'],
-        hid_dim=config['hid_dim'],
-        n_layers=config['num_decoder_layers'],
-        n_heads=config['n_heads'],
-        pf_dim=config['pf_dim'],
-        dropout=config['dropout'],
-        max_seq_len=config['max_seq_len'],
-        device=device
-    ).to(device)
+    yield paths
 
-    # Instantiate the dummy Transformer model
-    dummy_model = Transformer(
-        encoder,
-        decoder,
-        config['src_pad_idx'],
-        config['trg_pad_idx'],
-        device
-    ).to(device)
+    print("\nCleaning up test environment...")
+    shutil.rmtree(test_root)
 
-    # Save its state_dict to a dummy .pt file
-    model_file_path = dummy_data_dir / "dummy_best_model.pt"
-    torch.save(dummy_model.state_dict(), model_file_path)
-    yield model_file_path
-    # Teardown: file will be removed with dummy_data_dir
+def run_command(command: list[str]):
+    """Helper function to run a command and check its output."""
+    print(f"\nRunning command: {' '.join(command)}")
+    # Use the same python executable that runs pytest for consistency
+    result = subprocess.run(command, capture_output=True, text=True, check=False, encoding='utf-8')
+    
+    # Always print stdout/stderr for easier debugging
+    if result.stdout: print(f"--- STDOUT ---\n{result.stdout.strip()}")
+    if result.stderr: print(f"--- STDERR ---\n{result.stderr.strip()}")
+        
+    assert result.returncode == 0, f"Command failed with exit code {result.returncode}"
+    return result
 
-# --- Integration Tests ---
-
-def test_dummy_data_preparation(dummy_data_dir):
+def test_full_pipeline(setup_test_environment):
     """
-    Verify that dummy data files and SentencePiece model are created.
-    This implicitly checks if basic data config setup works.
+    Tests the full data -> train -> translate pipeline in an isolated environment.
     """
-    assert (dummy_data_dir / "config" / "data_config.yaml").exists()
-    assert (dummy_data_dir / "config" / "model_config.yaml").exists()
-    assert (dummy_data_dir / "raw" / "train.zo").exists()
-    assert (dummy_data_dir / "sp_models" / "zosia_sp.model").exists()
-    assert (dummy_data_dir / "sp_models" / "zosia_sp.vocab").exists()
+    paths = setup_test_environment
+    python_executable = sys.executable
+    config_dir_arg = ["--config-dir", str(paths["config"])]
 
-def test_model_loading_and_basic_inference(trained_model_path, dummy_data_dir, device):
-    """
-    Test that a trained model and tokenizer can be loaded and perform a basic
-    forward pass (inference) without crashing.
-    """
-    try:
-        # Load model configuration
-        model_config_path = dummy_data_dir / "config" / "model_config.yaml"
-        with open(model_config_path, 'r') as f:
-            config = yaml.safe_load(f)
+    # Step 1: Run preprocessing by calling the python modules directly
+    run_command([python_executable, "-m", "src.tokenizers.builder"] + config_dir_arg)
+    run_command([python_executable, "-m", "src.dataset.builder", "--src_lang", "en", "--tgt_lang", "zo"] + config_dir_arg)
+    
+    # Step 2: Run training for one epoch
+    with open(paths["config"] / "training.yaml", "r") as f:
+        training_config = yaml.safe_load(f)
+    training_config["training"]["num_epochs"] = 1
+    training_config["training"]["batch_size"] = 1 # Use batch size of 1 for tiny test data
+    with open(paths["config"] / "training.yaml", "w") as f:
+        yaml.dump(training_config, f)
+        
+    run_command([python_executable, "-m", "src.train.trainer", "--src_lang", "en", "--tgt_lang", "zo"] + config_dir_arg)
+    
+    # Step 3: Test translation
+    exp_dir = next(paths["experiments"].iterdir())
+    model_file = next(exp_dir.glob("*.pt"))
+    
+    run_command([
+        python_executable, "-m", "src.translate.translator",
+        "--model_file", str(model_file),
+        "--text", "test",
+        "--src_lang", "en",
+        "--tgt_lang", "zo",
+    ] + config_dir_arg)
 
-        print(f"DEBUG: Loaded model config: {config}") # Added debug print
-
-        # Load SentencePiece model
-        sp_model_path = str(dummy_data_dir / "sp_models" / "zosia_sp.model")
-        sp = spm.SentencePieceProcessor(model_file=sp_model_path)
-        print(f"DEBUG: SentencePiece vocab size: {sp.get_piece_size()}") # Added debug print
-
-        # Instantiate Encoder and Decoder with device
-        print("DEBUG: Attempting to instantiate Encoder...") # Added debug print
-        encoder = Encoder(
-            input_dim=config['src_vocab_size'],
-            hid_dim=config['hid_dim'],
-            n_layers=config['num_encoder_layers'],
-            n_heads=config['n_heads'],
-            pf_dim=config['pf_dim'],
-            dropout=config['dropout'],
-            max_seq_len=config['max_seq_len'],
-            device=device
-        ).to(device)
-        print("DEBUG: Encoder instantiated successfully.") # Added debug print
-
-        print("DEBUG: Attempting to instantiate Decoder...") # Added debug print
-        decoder = Decoder(
-            output_dim=config['tgt_vocab_size'],
-            hid_dim=config['hid_dim'],
-            n_layers=config['num_decoder_layers'],
-            n_heads=config['n_heads'],
-            pf_dim=config['pf_dim'],
-            dropout=config['dropout'],
-            max_seq_len=config['max_seq_len'],
-            device=device
-        ).to(device)
-        print("DEBUG: Decoder instantiated successfully.") # Added debug print
-
-        # Instantiate the Transformer with Encoder and Decoder instances
-        print("DEBUG: Attempting to instantiate Transformer...") # Added debug print
-        model = Transformer(
-            encoder,
-            decoder,
-            config['src_pad_idx'],
-            config['trg_pad_idx'],
-            device
-        ).to(device)
-        print("DEBUG: Transformer instantiated successfully.") # Added debug print
-
-        # Now, model is defined, so load_state_dict can be called
-        model.load_state_dict(torch.load(trained_model_path, map_location=device))
-        model.eval() # Set to evaluation mode
-
-        # --- Perform a very basic "translation" test ---
-        dummy_text = "This is a test sentence."
-
-        # 1. Tokenize input
-        src_tokens_list = [sp.bos_id()] + sp.encode_as_ids(dummy_text) + [sp.eos_id()]
-        src_tokens = torch.tensor([src_tokens_list], dtype=torch.long, device=device)
-
-        max_output_len = 20
-        translated_tokens = [sp.bos_id()]
-
-        with torch.no_grad():
-            # Encoder forward pass once
-            src_mask = model.make_src_mask(src_tokens)
-            enc_src = model.encoder(src_tokens, src_mask)
-
-            # Decoder loop (simulate a few steps or until EOS)
-            for i in range(max_output_len):
-                trg_tensor = torch.LongTensor(translated_tokens).unsqueeze(0).to(device)
-                trg_mask = model.make_trg_mask(trg_tensor)
-
-                output_logits = model.decoder(trg_tensor, enc_src, trg_mask, src_mask)
-
-                # Get the predicted next token (greedy decoding)
-                pred_token_id = output_logits.argmax(dim=-1)[:, -1].item()
-
-                # --- NEW: Ensure predicted token ID is within SentencePiece vocabulary bounds ---
-                # Get the actual vocabulary size from the loaded SentencePiece model
-                sp_vocab_size = sp.get_piece_size() # This gets the actual vocab size of the trained SP model
-                if pred_token_id >= sp_vocab_size:
-                    # If out of bounds, replace with UNK token ID
-                    pred_token_id = sp.unk_id() # Use SentencePiece's UNK ID
-                # --- END NEW ---
-
-                translated_tokens.append(pred_token_id)
-
-                if pred_token_id == sp.eos_id(): # Check for end-of-sentence token
-                    break
-
-        # Detokenize the result (excluding BOS/EOS, UNK, PAD)
-        final_translated_ids = [
-            token_id for token_id in translated_tokens
-            if token_id not in {sp.pad_id(), sp.bos_id(), sp.eos_id(), sp.unk_id()} # Also filter UNK if it's there
-        ]
-        translated_text = sp.decode_ids(final_translated_ids)
-
-        # Basic assertions
-        assert len(translated_text) >= 0 # Changed to >=0 as it might be empty if only special tokens are predicted
-        print(f"\nIntegration Test: Model loaded and basic inference performed.")
-        print(f"Input: '{dummy_text}'")
-        print(f"Translated (dummy): '{translated_text}'")
-
-    except Exception as e:
-        pytest.fail(f"Full pipeline inference failed unexpectedly: {e}")
+    print("\n[SUCCESS] Integration test pipeline completed successfully.")

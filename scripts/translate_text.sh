@@ -1,36 +1,87 @@
 #!/bin/bash
+# -----------------------------------------------------------------------------
+# Script: translate_text.sh
+#
+# Description:
+#   This script uses a trained model checkpoint to translate a given text.
+#   It now supports beam search with a length penalty alpha.
+#
+# Usage:
+#   bash scripts/translate_text.sh \
+#     --model_file <path> \
+#     --text "Your text" \
+#     --src <lang> \
+#     --tgt <lang> \
+#     [--beam_size 5] \
+#     [--alpha 0.6]
+#
+# Arguments:
+#   --model_file: Path to the trained model checkpoint (.pt file).
+#   --text: The sentence to translate.
+#   --src: The source language code.
+#   --tgt: The target language code.
+#   --beam_size (optional): The number of beams for beam search.
+#                         Defaults to 1 (greedy decoding).
+#   --alpha (optional): The length penalty strength. 0=no penalty.
+#                     A common value is 0.6.
+# -----------------------------------------------------------------------------
 
-# Script to translate a given text using the Zosia NMT model.
-# It uses the 'latest_run' symbolic link to automatically find the most
-# recently trained best model.
+set -e
 
-# Usage: ./scripts/translate_text.sh "Your sentence to translate."
+# Initialize variables
+MODEL_FILE=""
+TEXT_TO_TRANSLATE=""
+SRC_LANG=""
+TGT_LANG=""
+BEAM_SIZE="1"
+ALPHA="0.6" # Default alpha for length penalty
 
-# Check if a sentence was provided as an argument
-if [ -z "$1" ]; then
-    echo "Usage: ./scripts/translate_text.sh \"Your sentence to translate.\""
-    echo "Example: ./scripts/translate_text.sh \"Dam maw?\""
+# --- Argument Parsing ---
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --model_file) MODEL_FILE="$2"; shift ;;
+        --text) TEXT_TO_TRANSLATE="$2"; shift ;;
+        --src) SRC_LANG="$2"; shift ;;
+        --tgt) TGT_LANG="$2"; shift ;;
+        --beam_size) BEAM_SIZE="$2"; shift ;;
+        --alpha) ALPHA="$2"; shift ;;
+        *) echo "Unknown parameter passed: $1"; exit 1 ;;
+    esac
+    shift
+done
+
+# --- Validation ---
+if [ -z "$MODEL_FILE" ] || [ -z "$TEXT_TO_TRANSLATE" ] || [ -z "$SRC_LANG" ] || [ -z "$TGT_LANG" ]; then
+    echo "Error: Missing required arguments."
     exit 1
 fi
 
-SENTENCE_TO_TRANSLATE="$1"
-# Path to the best model checkpoint, using the 'latest_run' symlink.
-# This assumes your training script correctly sets up 'experiments/latest_run'
-# pointing to the most recent run, and that 'best_model.pt' is within its 'checkpoints' folder.
-MODEL_CHECKPOINT="experiments/latest_run/checkpoints/best_model.pt"
-
-echo "--- Starting Zosia Text Translation ---"
-echo "Input Sentence: \"$SENTENCE_TO_TRANSLATE\""
-
-# Execute the translator.py module.
-# It should read configurations and load the model from the specified checkpoint path.
-python -m src.translate.translator \
-    --checkpoint_path "$MODEL_CHECKPOINT" \
-    --sentence "$SENTENCE_TO_TRANSLATE"
-
-if [ $? -eq 0 ]; then
-    echo "--- Translation Completed ---"
+# --- Script Body ---
+echo "============================================="
+echo "        ZoSia Interactive Translator         "
+echo "============================================="
+echo
+echo "Model:         ${MODEL_FILE}"
+echo "Direction:     ${SRC_LANG} -> ${TGT_LANG}"
+if [ "$BEAM_SIZE" -gt 1 ]; then
+    echo "Search Method: Beam Search (size=${BEAM_SIZE}, alpha=${ALPHA})"
 else
-    echo "--- Translation Failed ---"
-    exit 1
+    echo "Search Method: Greedy Decoding"
 fi
+echo "Input Text:    \"${TEXT_TO_TRANSLATE}\""
+echo "---------------------------------------------"
+echo
+
+# Launch the Python translation module
+python -m src.translate.translator \
+    --model_file "$MODEL_FILE" \
+    --text "$TEXT_TO_TRANSLATE" \
+    --src_lang "$SRC_LANG" \
+    --tgt_lang "$TGT_LANG" \
+    --beam_size "$BEAM_SIZE" \
+    --alpha "$ALPHA"
+
+echo
+echo "============================================="
+echo "           Translation Complete            "
+echo "============================================="

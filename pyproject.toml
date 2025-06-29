@@ -1,37 +1,35 @@
+# pyproject.toml
+# This file contains project metadata and build system configuration.
+# It follows the PEP 621 standard for modern Python packaging.
+
 [project]
 name = "zosia"
 version = "0.1.0"
-description = "Zo-English Neural Machine Translation System"
+description = "Bidirectional Machine Translation for Zolai and English (Zo <-> En)"
 authors = [
-    { name = "Khen Solomon Lethil", email = "khensolomon@gmail.com" }
+    { name = "Khen Solomon Lethil", email = "khensolomon@gmail.com" },
 ]
-license = { text = "MIT License" }
+readme = "README.md"
 requires-python = ">=3.9"
-dependencies = [
-    # Dependencies are typically managed by requirements.txt for simpler projects
-    # But for a proper package, you'd list them here
+license = { file = "LICENSE" }
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Linguistic",
 ]
+
+# Project dependencies are listed in requirements.txt for simplicity in this project,
+# but can also be specified directly here.
+dependencies = []
 
 [project.urls]
-"Homepage" = "https://github.com/khensolomon/zosia" # Replace with your repo URL
+"Homepage" = "https://github.com/khensolomon/zosia"
 "Bug Tracker" = "https://github.com/khensolomon/zosia/issues"
 
-[tool.setuptools]
-packages = ["src"] # Tell setuptools to find packages in 'src'
-
-[tool.black]
-line-length = 100
-target-version = ['py39']
-
-[tool.isort]
-profile = "black"
-line_length = 100
-known_first_party = ["src"]
-
-[tool.flake8]
-max-line-length = 100
-extend-ignore = ["E203"] # conflicts with black
-
-
-[tool.pytest.ini_options]
-pythonpath = "src"

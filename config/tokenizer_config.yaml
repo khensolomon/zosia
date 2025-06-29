@@ -1,4 +1,0 @@
-# config/tokenizer_config.yaml
-vocab_size: 100           # Recommended: Start with 8000 or 16000. For very large datasets, up to 32000.
-model_type: bpe            # 'bpe' (Byte-Pair Encoding) or 'unigram'. BPE is commonly used.
-model_prefix: zo_en_nmt_sp # This will be the prefix for your generated tokenizer files (e.g., zo_en_nmt_sp.model, zo_en_nmt_sp.vocab)

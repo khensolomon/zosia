@@ -15,17 +15,17 @@ Before starting, ensure the following software is installed on the local machine
 ## 2. Project Setup
 
 1. **Clone the Repository:**
-    Open a terminal or command prompt and clone the project's Git repository. Replace `<repository_url>` with the actual URL of the project's Git repository.
+    Open a terminal or command prompt and clone the project's Git repository.
 
     ```bash
-    git clone <repository_url>
+    git clone https://github.com/khensolomon/zosia.git
     ```
 
 2. **Navigate into the Project Directory:**
     Change the current directory to the root of the cloned project.
 
     ```bash
-    cd zosia_nmt_project # Replace 'zosia_nmt_project' with the actual name of the cloned project folder.
+    cd zosia # Replace 'zosia' with the actual name of the cloned project folder.
     ```
 
 ## 3. Python Environment Setup
@@ -50,7 +50,7 @@ Using a virtual environment is highly recommended to manage project dependencies
     * **On macOS/Linux:**
 
         ```bash
-        source venv/bin/activate
+        source venv/Scripts/activate
         ```
 
     (The command prompt should display `(venv)` at the beginning, indicating the environment is active.)

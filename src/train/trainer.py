@@ -1,484 +1,259 @@
-# The main training loop.
+# -----------------------------------------------------------------------------
+# File: src/train/trainer.py
+#
+# Description:
+#   Main script for training the Transformer model. It has been upgraded to
+#   save the best model to both the run-specific experiment folder and the
+#   main experiments folder for easy access.
+# -----------------------------------------------------------------------------
 
+import yaml
+import argparse
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import os
-import time
-import math
-import argparse
-import yaml
-import sentencepiece as spm
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+from pathlib import Path
+from datetime import datetime
 from tqdm import tqdm
-# CHANGED: Updated import for autocast and GradScaler to the newer `torch.amp` path
-from torch.amp import autocast, GradScaler 
+import re
+import sys
 
-# from src.models.transformer_model import Transformer, Encoder, Decoder
-# from src.data.dataset_utils import get_dataloaders
-# from src.train.evaluator import calculate_bleu
-# from src.utils.general_utils import load_config, setup_logging, get_device, save_checkpoint, load_checkpoint
-# from src.utils.logger import get_logger
+# --- Local Imports ---
+from src.models.transformer import build_transformer
+from src.dataset.utils import BilingualDataset, PadCollate
+from tokenizers import Tokenizer
 
-from src.models.transformer_model import Transformer, Encoder, Decoder
-from src.data.dataset_utils import get_dataloaders
-from src.train.evaluator import calculate_bleu
-from src.utils.general_utils import load_config, get_device, save_checkpoint, load_checkpoint 
-from src.utils.logger import get_logger, setup_logging 
+def load_config(config_dir: Path):
+    """
+    Loads all .yaml files from a given config directory, merges them,
+    and robustly resolves all nested ${group.key} placeholders.
+    """
+    config = {}
+    for config_file in sorted(config_dir.glob('*.yaml')):
+        with open(config_file, 'r', encoding='utf-8') as f:
+            content = yaml.safe_load(f)
+            if content:
+                for key, value in content.items():
+                    if key in config and isinstance(config[key], dict) and isinstance(value, dict):
+                        config[key].update(value)
+                    else:
+                        config[key] = value
 
-# Initialize logger
-logger = get_logger(__name__)
-
-# --- Learning Rate Schedulers ---
-class NoamOpt:
-    "Optim wrapper that implements learning rate scheduling with warmup."
-    def __init__(self, model_size, warmup_steps, optimizer):
-        self.optimizer = optimizer
-        self.warmup_steps = warmup_steps
-        self.model_size = model_size
-        self._step = 0
-        self._rate = 0
-
-    def step(self):
-        "Update parameters and lr"
-        self._step += 1
-        rate = self.rate()
-        for p in self.optimizer.param_groups:
-            p['lr'] = rate
-        self._rate = rate
-        self.optimizer.step()
-
-    def rate(self, step=None):
-        "Implement `lrate` above"
-        if step is None:
-            step = self._step
-        return self.model_size**(-0.5) * \
-               min(step**(-0.5), step * self.warmup_steps**(-1.5))
+    config_str = yaml.dump(config)
+    for _ in range(5):
+        placeholders = set(re.findall(r'\$\{(.*?)\}', config_str))
+        if not placeholders: break
+        for p_str in placeholders:
+            if p_str == 'paths.root':
+                root_path_val = str(Path(config['paths']['root']).resolve())
+                config_str = config_str.replace(f'${{{p_str}}}', root_path_val)
+                continue
+            try:
+                lookup_config = yaml.safe_load(config_str)
+                group, key = p_str.split('.')
+                value = lookup_config.get(group, {}).get(key)
+                if isinstance(value, str) and not re.search(r'\$\{(.*?)\}', value):
+                    config_str = config_str.replace(f'${{{p_str}}}', value)
+            except (ValueError, KeyError): continue
+        config = yaml.safe_load(config_str)
     
-    def state_dict(self):
-        """Returns the state of the scheduler as a :class:`dict`.
-        It contains optimizer state and its own state (_step, warmup_steps, model_size).
+    return config
+
+# --- Main Training Class ---
+class Trainer:
+    def __init__(self, args, cfg):
+        self.args = args
+        self.cfg = cfg
+        self.src_lang = args.src_lang
+        self.tgt_lang = args.tgt_lang
+        self.model = None
+        self.optimizer = None
+        self.loss_fn = None
+        self.train_dataloader = None
+        self.val_dataloader = None
+        self.writer = None
+        self.start_epoch = 0
+        self.global_step = 0
+        self.src_pad_id = 0
+        self.tgt_pad_id = 0
+        self.src_vocab_size = 0
+        self.tgt_vocab_size = 0
+        
+        self.best_val_loss = float('inf')
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device: {self.device}")
+
+        now = datetime.now().strftime("%Y%m%d%H%M%S")
+        direction_short = f"{self.src_lang}{self.tgt_lang}"
+        self.exp_dir = Path(cfg['training']['experiment_dir']) / f"{now}_{direction_short}"
+        
+        self.exp_dir.mkdir(parents=True, exist_ok=True)
+        self.writer = SummaryWriter(log_dir=self.exp_dir)
+        print(f"Experiment data will be saved to: {self.exp_dir}")
+
+    def _setup(self):
+        self._prepare_dataloaders()
+        self._build_model()
+        self._build_optimizer()
+        self._build_loss_fn()
+
+    def _prepare_dataloaders(self):
+        print("Preparing dataloaders...")
+        data_cfg = self.cfg['data_paths']
+        processed_path = Path(data_cfg['processed'])
+
+        tokenizer_path = Path(data_cfg['tokenizers'])
+        src_tokenizer = Tokenizer.from_file(str(tokenizer_path / self.cfg['tokenizer']['tokenizer_file'].format(lang=self.src_lang)))
+        tgt_tokenizer = Tokenizer.from_file(str(tokenizer_path / self.cfg['tokenizer']['tokenizer_file'].format(lang=self.tgt_lang)))
+        
+        self.src_pad_id = src_tokenizer.token_to_id("[PAD]")
+        self.tgt_pad_id = tgt_tokenizer.token_to_id("[PAD]")
+        self.src_vocab_size = src_tokenizer.get_vocab_size()
+        self.tgt_vocab_size = tgt_tokenizer.get_vocab_size()
+
+        train_dataset = BilingualDataset(str(processed_path / f"train.{self.src_lang}"), str(processed_path / f"train.{self.tgt_lang}"), src_tokenizer, tgt_tokenizer)
+        val_dataset = BilingualDataset(str(processed_path / f"val.{self.src_lang}"), str(processed_path / f"val.{self.tgt_lang}"), src_tokenizer, tgt_tokenizer)
+        
+        collate_obj = PadCollate(src_pad_id=self.src_pad_id, tgt_pad_id=self.tgt_pad_id)
+
+        self.train_dataloader = DataLoader(train_dataset, batch_size=self.cfg['training']['batch_size'], shuffle=True, collate_fn=collate_obj, num_workers=self.cfg['training']['num_workers'])
+        self.val_dataloader = DataLoader(val_dataset, batch_size=self.cfg['training']['batch_size'], shuffle=False, collate_fn=collate_obj, num_workers=self.cfg['training']['num_workers'])
+        
+        print("[OK] Dataloaders ready.")
+        
+    def _build_model(self):
+        print("Building model...")
+        self.model = build_transformer(
+            self.src_vocab_size, self.tgt_vocab_size,
+            self.src_pad_id, self.tgt_pad_id,
+            self.cfg['model']['d_model'], self.cfg['model']['num_encoder_layers'],
+            self.cfg['model']['num_decoder_layers'], self.cfg['model']['num_heads'],
+            self.cfg['model']['d_ff'], self.cfg['model']['dropout'], self.cfg['model']['max_seq_len']
+        ).to(self.device)
+        print("[OK] Model built and moved to device.")
+
+    def _build_optimizer(self):
+        opt_cfg = self.cfg['training']['optimizer']
+        if opt_cfg['name'] == 'Adam':
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.cfg['training']['learning_rate'], betas=tuple(opt_cfg['betas']), eps=opt_cfg['eps'])
+        else:
+            raise NotImplementedError(f"Optimizer {opt_cfg['name']} not supported.")
+        print(f"[OK] Optimizer '{opt_cfg['name']}' configured.")
+
+    def _build_loss_fn(self):
+        self.loss_fn = nn.CrossEntropyLoss(label_smoothing=self.cfg['training']['label_smoothing'], ignore_index=self.tgt_pad_id)
+        print("[OK] Loss function (CrossEntropyLoss with Label Smoothing) configured.")
+
+    def _run_one_epoch(self, epoch):
+        self.model.train()
+        batch_iterator = tqdm(self.train_dataloader, desc=f"Epoch {epoch+1}/{self.cfg['training']['num_epochs']}")
+        for batch in batch_iterator:
+            self.optimizer.zero_grad(set_to_none=True)
+            
+            encoder_input = batch['encoder_input'].to(self.device)
+            decoder_input = batch['decoder_input'].to(self.device)
+            label = batch['label'].to(self.device)
+
+            src_mask = (encoder_input != self.src_pad_id).unsqueeze(1).unsqueeze(2)
+            tgt_mask = (decoder_input != self.tgt_pad_id).unsqueeze(1).unsqueeze(2) & self._generate_subsequent_mask(decoder_input.size(1))
+            
+            encoder_output = self.model.encode(encoder_input, src_mask)
+            decoder_output = self.model.decode(encoder_output, src_mask, decoder_input, tgt_mask)
+            output = self.model.project(decoder_output)
+
+            loss = self.loss_fn(output.view(-1, self.tgt_vocab_size), label.view(-1))
+            loss.backward()
+            self.optimizer.step()
+            
+            batch_iterator.set_postfix({"loss": f"{loss.item():.4f}"})
+            self.writer.add_scalar('Loss/train', loss.item(), self.global_step)
+            self.global_step += 1
+            
+    def _validate(self, epoch):
+        self.model.eval()
+        total_loss = 0
+        
+        if not self.val_dataloader or len(self.val_dataloader.dataset) == 0:
+            print(f"Validation not possible for Epoch {epoch+1}: No validation data.")
+            return
+
+        batch_iterator = tqdm(self.val_dataloader, desc=f"Validating Epoch {epoch+1}")
+        with torch.no_grad():
+            for batch in batch_iterator:
+                encoder_input = batch['encoder_input'].to(self.device)
+                decoder_input = batch['decoder_input'].to(self.device)
+                label = batch['label'].to(self.device)
+
+                src_mask = (encoder_input != self.src_pad_id).unsqueeze(1).unsqueeze(2)
+                tgt_mask = (decoder_input != self.tgt_pad_id).unsqueeze(1).unsqueeze(2) & self._generate_subsequent_mask(decoder_input.size(1))
+
+                encoder_output = self.model.encode(encoder_input, src_mask)
+                decoder_output = self.model.decode(encoder_output, src_mask, decoder_input, tgt_mask)
+                output = self.model.project(decoder_output)
+                
+                loss = self.loss_fn(output.view(-1, self.tgt_vocab_size), label.view(-1))
+                total_loss += loss.item()
+
+        avg_loss = total_loss / len(self.val_dataloader)
+        print(f"\nValidation Loss for Epoch {epoch+1}: {avg_loss:.4f}")
+        self.writer.add_scalar('Loss/validation', avg_loss, epoch)
+        
+        if avg_loss < self.best_val_loss:
+            self.best_val_loss = avg_loss
+            print(f"[BEST MODEL] New best model found! Saving checkpoint... (Epoch {epoch+1})")
+            self._save_best_checkpoint(epoch)
+
+    def _save_best_checkpoint(self, epoch):
         """
-        return {
+        Saves the best model checkpoint to two locations:
+        1. Inside the specific experiment run's directory (for archival).
+        2. Directly in the main experiments directory (for easy access).
+        """
+        filename_template = self.cfg['training']['best_model_filename']
+        model_filename = filename_template.format(
+            src_lang=self.src_lang,
+            tgt_lang=self.tgt_lang
+        )
+        
+        checkpoint_data = {
+            'epoch': epoch + 1,
+            'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
-            '_step': self._step,
-            'warmup_steps': self.warmup_steps,
-            'model_size': self.model_size,
-            '_rate': self._rate # Good to save current rate too
+            'validation_loss': self.best_val_loss
         }
 
-    def load_state_dict(self, state_dict):
-        """Loads the scheduler state.
-        """
-        self.optimizer.load_state_dict(state_dict['optimizer_state_dict'])
-        self._step = state_dict['_step']
-        self.warmup_steps = state_dict['warmup_steps']
-        self.model_size = state_dict['model_size']
-        self._rate = state_dict['_rate']
+        # Path 1: Inside the timestamped experiment directory
+        exp_save_path = self.exp_dir / model_filename
+        torch.save(checkpoint_data, exp_save_path)
+        print(f"Best model for this run saved to: {exp_save_path}")
 
-def train_epoch(model: Transformer,
-                dataloader: torch.utils.data.DataLoader,
-                optimizer: optim.Optimizer,
-                criterion: nn.CrossEntropyLoss,
-                clip: float,
-                device: torch.device,
-                scaler: GradScaler = None, # For mixed precision
-                accumulate_grad_batches: int = 1):
-    """
-    Performs one epoch of training.
-    """
-    model.train()
-    epoch_loss = 0
-    pbar = tqdm(dataloader, desc="Training")
+        # Path 2: Directly in the main experiments directory
+        main_experiments_dir = Path(self.cfg['training']['experiment_dir'])
+        main_save_path = main_experiments_dir / model_filename
+        torch.save(checkpoint_data, main_save_path)
+        print(f"Overall best model for {self.src_lang}-{self.tgt_lang} updated at: {main_save_path}\n")
 
-    # optimizer.zero_grad() # Zero gradients once per accumulation step
-    optimizer.optimizer.zero_grad() # Access the underlying optimizer
+    def _generate_subsequent_mask(self, size):
+        mask = torch.tril(torch.ones(size, size, device=self.device)).bool()
+        return mask
 
-    for batch_idx, (src, trg) in enumerate(pbar):
-        src, trg = src.to(device), trg.to(device)
+    def run(self):
+        self._setup()
+        for epoch in range(self.start_epoch, self.cfg['training']['num_epochs']):
+            self._run_one_epoch(epoch)
+            self._validate(epoch)
+        
+        print("Training finished.")
 
-        # CHANGED: Added device_type='cuda' as recommended by PyTorch
-        with autocast(device_type='cuda', enabled=scaler is not None): 
-            output = model(src, trg[:, :-1]) # Trg input is shifted right (remove last token)
-
-            # Output is (batch_size, trg_len-1, output_dim)
-            # Target is (batch_size, trg_len)
-            output_dim = output.shape[-1]
-            # Flatten output and target for criterion
-            output = output.contiguous().view(-1, output_dim)
-            trg = trg[:, 1:].contiguous().view(-1) # Target shifted left (remove first token)
-
-            # Ignore padding tokens in loss calculation
-            loss = criterion(output, trg)
-            loss = loss / accumulate_grad_batches # Scale loss by accumulation factor
-
-        if scaler is not None:
-            scaler.scale(loss).backward()
-        else:
-            loss.backward()
-
-        if (batch_idx + 1) % accumulate_grad_batches == 0:
-            if scaler is not None:
-                scaler.unscale_(optimizer) # Unscale before clipping
-                torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
-                optimizer.step()
-            # optimizer.zero_grad() # Zero gradients after optimization step
-            optimizer.optimizer.zero_grad() # Access the underlying optimizer
-
-        epoch_loss += loss.item() * accumulate_grad_batches # Scale loss back for tracking
-        pbar.set_postfix(loss=epoch_loss / (batch_idx + 1))
-
-    return epoch_loss / len(dataloader)
-
-def evaluate_epoch(model: Transformer,
-                   dataloader: torch.utils.data.DataLoader,
-                   criterion: nn.CrossEntropyLoss,
-                   device: torch.device,
-                   sp_model: spm.SentencePieceProcessor,
-                   max_seq_len: int,
-                   scaler: GradScaler = None):
-    """
-    Evaluates the model on the validation/test set.
-    """
-    model.eval()
-    epoch_loss = 0
-    all_predicted_tokens = []
-    all_target_tokens = []
-
-    with torch.no_grad():
-        pbar = tqdm(dataloader, desc="Evaluating")
-        for src, trg in pbar:
-            src, trg = src.to(device), trg.to(device)
-
-            # CHANGED: Added device_type='cuda' as recommended by PyTorch
-            with autocast(device_type='cuda', enabled=scaler is not None):
-                # Teacher forcing for loss calculation
-                output = model(src, trg[:, :-1])
-                output_dim = output.shape[-1]
-                loss = criterion(output.contiguous().view(-1, output_dim), trg[:, 1:].contiguous().view(-1))
-            
-            epoch_loss += loss.item()
-
-            # For BLEU score, use greedy decoding (or beam search)
-            # This is a simplified greedy decoding for evaluation, for robust BLEU use beam search in translator.py
-            max_trg_len = trg.shape[1] # Use target length as max decoding length
-            batch_size = src.shape[0]
-
-            # Start decoding with SOS token
-            translated_tokens = torch.full((batch_size, 1), sp_model.bos_id(), dtype=torch.long, device=device)
-
-            for t in range(max_trg_len -1): # Generate up to max_trg_len - 1 tokens
-                src_mask = model.make_src_mask(src)
-                trg_mask = model.make_trg_mask(translated_tokens)
-
-                # CHANGED: Added device_type='cuda' as recommended by PyTorch
-                with autocast(device_type='cuda', enabled=scaler is not None):
-                    output = model.decoder(translated_tokens, model.encoder(src, src_mask), trg_mask, src_mask)
-
-                pred_token = output[:, -1].argmax(1).unsqueeze(1) # Take last token's prediction
-                translated_tokens = torch.cat((translated_tokens, pred_token), dim=1)
-
-                # Break if all sequences have generated EOS or reached max_trg_len
-                if (pred_token == sp_model.eos_id()).all():
-                    break
-            
-            # Decode token IDs to text for BLEU calculation
-            for i in range(batch_size):
-                # Remove SOS, EOS, PAD tokens for BLEU calculation
-                pred_ids = translated_tokens[i].tolist()
-                pred_text = sp_model.decode([id for id in pred_ids if id not in [sp_model.bos_id(), sp_model.eos_id(), sp_model.pad_id()]])
-                all_predicted_tokens.append(pred_text)
-
-                trg_ids = trg[i].tolist()
-                trg_text = sp_model.decode([id for id in trg_ids if id not in [sp_model.bos_id(), sp_model.eos_id(), sp_model.pad_id()]])
-                all_target_tokens.append([trg_text]) # sacrebleu expects list of references
-
-    avg_loss = epoch_loss / len(dataloader)
-    bleu_score = calculate_bleu(all_predicted_tokens, all_target_tokens)
-    return avg_loss, bleu_score
-
-def main():
-    parser = argparse.ArgumentParser(description="Train a Zo-English Transformer NMT model.")
-    # Default config paths are already correctly set here
-    parser.add_argument("--config", type=str, default="config/training_config.yaml",
-                        help="Path to the training configuration YAML file. Default: config/training_config.yaml")
-    parser.add_argument("--model_config", type=str, default="config/model_config.yaml",
-                        help="Path to the model configuration YAML file. Default: config/model_config.yaml")
-    parser.add_argument("--data_config", type=str, default="config/data_config.yaml",
-                        help="Path to the data configuration YAML file. Default: config/data_config.yaml")
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="ZoSia Model Trainer")
+    parser.add_argument('--config-dir', type=str, default='./config', help="Path to the configuration directory.")
+    parser.add_argument('--src_lang', type=str, required=True, help="Source language code")
+    parser.add_argument('--tgt_lang', type=str, required=True, help="Target language code")
     args = parser.parse_args()
 
-    # Load configurations with robust error handling
-    training_config = {}
-    model_config = {}
-    data_config = {}
-
-    try:
-        training_config = load_config(args.config)
-        logger.info(f"Loaded main training configuration from {args.config}")
-    except FileNotFoundError:
-        logger.error(f"Error: Main training configuration file not found at '{args.config}'. Please check the path.")
-        return # Exit if a critical config is missing
-    except yaml.YAMLError as e:
-        logger.error(f"Error parsing main training configuration file '{args.config}': {e}")
-        return
-    except Exception as e:
-        logger.error(f"An unexpected error occurred loading main training config '{args.config}': {e}")
-        return
-
-    try:
-        model_config = load_config(args.model_config)
-        logger.info(f"Loaded model configuration from {args.model_config}")
-    except FileNotFoundError:
-        logger.error(f"Error: Model configuration file not found at '{args.model_config}'. Please check the path.")
-        return # Exit if a critical config is missing
-    except yaml.YAMLError as e:
-        logger.error(f"Error parsing model configuration file '{args.model_config}': {e}")
-        return
-    except Exception as e:
-        logger.error(f"An unexpected error occurred loading model config '{args.model_config}': {e}")
-        return
-
-    try:
-        data_config = load_config(args.data_config)
-        logger.info(f"Loaded data configuration from {args.data_config}")
-    except FileNotFoundError:
-        logger.error(f"Error: Data configuration file not found at '{args.data_config}'. Please check the path.")
-        return # Exit if a critical config is missing
-    except yaml.YAMLError as e:
-        logger.error(f"Error parsing data configuration file '{args.data_config}': {e}")
-        return
-    except Exception as e:
-        logger.error(f"An unexpected error occurred loading data config '{args.data_config}': {e}")
-        return
-
-    # Setup logging and experiment directory
-    exp_name_prefix = training_config.get("experiment_name_prefix", "nmt_run")
-    # It's safer to get base_output_dir from training_config or a dedicated project config
-    # rather than loading another default_config.yaml in the main run.
-    # Assuming base_output_dir is in training_config or you have a project-wide config loaded once.
-    # For simplicity, let's assume it's in training_config for now.
-    base_output_dir = training_config.get("base_output_dir", "experiments") # Get from training_config
-    
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    experiment_dir = os.path.join(base_output_dir, f"{exp_name_prefix}_{timestamp}")
-    os.makedirs(experiment_dir, exist_ok=True)
-    os.makedirs(os.path.join(experiment_dir, "checkpoints"), exist_ok=True)
-    os.makedirs(os.path.join(experiment_dir, "logs"), exist_ok=True)
-
-    latest_run_symlink_path = os.path.join(base_output_dir, "latest_run")
-    # Remove existing symlink if it exists to ensure it always points to the *newest* run
-    if os.path.islink(latest_run_symlink_path):
-        os.remove(latest_run_symlink_path)
-        logger.info(f"Removed old '{latest_run_symlink_path}' symlink.")
-    try:
-        os.symlink(os.path.basename(experiment_dir), latest_run_symlink_path, target_is_directory=True)
-        logger.info(f"Created symlink '{latest_run_symlink_path}' pointing to '{os.path.basename(experiment_dir)}'.")
-    except OSError as e:
-        logger.warning(f"Could not create 'latest_run' symlink: {e}")
-
-    # setup_logging function needs the base experiment directory to set up file handlers
-    log_dir_path = os.path.join(experiment_dir, "logs")
-    run_log_name = "training"
-    setup_logging(log_dir_path, run_log_name) # Ensure this sets up file logging correctly
-    configured_log_level = training_config.get("log_level", "INFO") # Default to INFO if not specified
-    setup_logging(log_dir_path, run_log_name, configured_log_level) # Pass the level string
-
-    logger.info(f"Starting new experiment: {experiment_dir}")
-    logger.info(f"Training Config:\n{yaml.dump(training_config, indent=2)}")
-    logger.info(f"Model Config:\n{yaml.dump(model_config, indent=2)}")
-    logger.info(f"Data Config:\n{yaml.dump(data_config, indent=2)}")
-
-    # Initialize WandB if enabled
-    use_wandb = training_config.get("use_wandb", False)
-    if use_wandb:
-        try:
-            import wandb
-            wandb.init(project=training_config.get("wandb_project_name", "ZoSia_NMT"),
-                       entity=training_config.get("wandb_entity", None),
-                       config={**training_config, **model_config, **data_config},
-                       name=f"{exp_name_prefix}_{timestamp}",
-                       dir=experiment_dir) # Logs will be stored in this directory
-            logger.info("Weights & Biases initialized.")
-        except ImportError:
-            logger.warning("Weights & Biases (wandb) not installed. Please run `pip install wandb` to enable it.")
-            use_wandb = False # Disable wandb if not installed
-        except Exception as e:
-            logger.error(f"Error initializing Weights & Biases: {e}")
-            use_wandb = False # Disable wandb on error
-
-
-    device = get_device()
-    logger.info(f"Using device: {device}")
-
-    # Load SentencePiece tokenizer
-    vocab_dir = data_config.get("vocab_dir")
-    tokenizer_prefix = data_config.get("tokenizer_prefix")
-    
-    if not vocab_dir or not tokenizer_prefix:
-        logger.error("Error: 'vocab_dir' or 'tokenizer_prefix' missing in data_config.yaml.")
-        return # Exit if essential paths are missing
-
-    sp_model_path = os.path.join(vocab_dir, f"{tokenizer_prefix}.model")
-    if not os.path.exists(sp_model_path):
-        logger.error(f"SentencePiece model not found at {sp_model_path}. Please run make_dataset.py first to create it.")
-        return
-
-    try:
-        sp_model = spm.SentencePieceProcessor(model_file=sp_model_path)
-        logger.info(f"Tokenizer loaded successfully from {sp_model_path}")
-        logger.info(f"Tokenizer vocabulary size: {sp_model.get_piece_size()}")
-    except Exception as e:
-        logger.error(f"Failed to load tokenizer model from {sp_model_path}: {e}")
-        return # Exit if tokenizer loading fails
-
-    src_pad_idx = sp_model.pad_id()
-    trg_pad_idx = sp_model.pad_id()
-    trg_output_dim = sp_model.get_piece_size() # Vocabulary size for target output
-
-    # Get DataLoaders
-    train_loader, val_loader, _ = get_dataloaders(data_config, training_config, sp_model)
-    logger.info("DataLoaders prepared.")
-
-    # Initialize model
-    # Ensure model_config has necessary keys, using .get() with defaults for robustness
-    input_dim = sp_model.get_piece_size() # Assuming same vocab for src/tgt
-    hidden_dim = model_config.get("hidden_dim")
-    enc_layers = model_config.get("enc_layers")
-    enc_heads = model_config.get("enc_heads")
-    enc_pf_dim = model_config.get("enc_pf_dim")
-    enc_dropout = model_config.get("enc_dropout")
-    dec_layers = model_config.get("dec_layers")
-    dec_heads = model_config.get("dec_heads")
-    dec_pf_dim = model_config.get("dec_pf_dim")
-    dec_dropout = model_config.get("dec_dropout")
-    max_seq_len_model = model_config.get("max_seq_len") # Use a different name to avoid confusion with data_config's max_sequence_length
-
-    # Basic check for essential model configs
-    if any(x is None for x in [hidden_dim, enc_layers, enc_heads, enc_pf_dim, enc_dropout,
-                               dec_layers, dec_heads, dec_pf_dim, dec_dropout, max_seq_len_model]):
-        logger.error("Error: One or more essential model configuration parameters are missing.")
-        return
-
-    enc = Encoder(input_dim=input_dim,
-                  hid_dim=hidden_dim,
-                  n_layers=enc_layers,
-                  n_heads=enc_heads,
-                  pf_dim=enc_pf_dim,
-                  dropout=enc_dropout,
-                  max_seq_len=max_seq_len_model,
-                  device=device)
-
-    dec = Decoder(output_dim=trg_output_dim,
-                  hid_dim=hidden_dim,
-                  n_layers=dec_layers,
-                  n_heads=dec_heads,
-                  pf_dim=dec_pf_dim,
-                  dropout=dec_dropout,
-                  max_seq_len=max_seq_len_model,
-                  device=device)
-
-    model = Transformer(enc, dec, src_pad_idx, trg_pad_idx, device).to(device)
-
-    # Initialize weights (optional, but can help training stability)
-    def initialize_weights(m):
-        if hasattr(m, 'weight') and m.weight.dim() > 1:
-            nn.init.xavier_uniform_(m.weight.data)
-    model.apply(initialize_weights)
-
-    # Commented out for cleaner logs
-    logger.info(f"Model initialized: \n{model}")
-    logger.info(f"Number of trainable parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}")
-
-    learning_rate = training_config.get("learning_rate")
-    warmup_steps = training_config.get("warmup_steps")
-    gradient_clip = training_config.get("gradient_clip")
-    epochs = training_config.get("epochs")
-    accumulate_grad_batches = training_config.get("accumulate_grad_batches", 1) # Default to 1
-
-    if any(x is None for x in [learning_rate, warmup_steps, gradient_clip, epochs]):
-        logger.error("Error: One or more essential training configuration parameters (learning_rate, warmup_steps, gradient_clip, epochs) are missing.")
-        return
-
-    optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
-    # Noam scheduler
-    scheduler = NoamOpt(hidden_dim, warmup_steps, optimizer) # Use hidden_dim from model_config
-
-    # Loss function: ignore padding index for target
-    criterion = nn.CrossEntropyLoss(ignore_index=trg_pad_idx)
-
-    # Mixed precision scaler
-    scaler = GradScaler() if training_config.get("mixed_precision", False) and device.type == 'cuda' else None
-    if scaler:
-        logger.info("Using Automatic Mixed Precision (AMP).")
-
-    best_val_bleu = -1.0 # Track best BLEU for saving model
-    best_val_loss = float('inf') # Track best loss for tie-breaking or alternative saving
-
-    # Training loop
-    for epoch in range(epochs):
-        start_time = time.time()
-
-        train_loss = train_epoch(model, train_loader, scheduler, criterion,
-                                 gradient_clip, device,
-                                 scaler, accumulate_grad_batches)
-        val_loss, val_bleu = evaluate_epoch(model, val_loader, criterion, device, sp_model,
-                                            max_seq_len_model, scaler) # Use model_config's max_seq_len for evaluation
-
-        end_time = time.time()
-        epoch_mins, epoch_secs = divmod(end_time - start_time, 60)
-
-        logger.info(f"Epoch: {epoch+1:02} | Time: {int(epoch_mins)}m {int(epoch_secs)}s")
-        logger.info(f"\tTrain Loss: {train_loss:.3f} | Train PPL: {math.exp(train_loss):.3f}")
-        logger.info(f"\t Val. Loss: {val_loss:.3f} |  Val. PPL: {math.exp(val_loss):.3f} | Val. BLEU: {val_bleu:.2f}")
-
-        if use_wandb:
-            wandb.log({
-                "train_loss": train_loss,
-                "train_ppl": math.exp(train_loss),
-                "val_loss": val_loss,
-                "val_ppl": math.exp(val_loss),
-                "val_bleu": val_bleu,
-                "epoch": epoch,
-                "learning_rate": scheduler.rate() # Log current LR from scheduler
-            })
-
-        # Save checkpoint
-        checkpoint_filename = f"epoch_{epoch+1:02d}.pt"
-        checkpoint_path = os.path.join(experiment_dir, "checkpoints", checkpoint_filename)
-        
-        # Determine whether to save as best model (based on BLEU)
-        is_best_bleu = val_bleu > best_val_bleu
-        if is_best_bleu:
-            best_val_bleu = val_bleu
-            best_val_loss = val_loss # Update best_val_loss too
-
-        save_checkpoint({
-            'epoch': epoch + 1,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'scheduler_state_dict': scheduler.state_dict(), # Save scheduler state
-            'val_loss': val_loss,
-            'val_bleu': val_bleu,
-            'sp_model_path': sp_model_path,
-            'data_config': data_config,
-            'model_config': model_config,
-            'training_config': training_config,
-            'amp_scaler_state_dict': scaler.state_dict() if scaler else None # Save scaler state
-        }, checkpoint_path, is_best=is_best_bleu, best_model_filename="best_model.pt") # Pass is_best to save_checkpoint
-        
-        logger.info(f"Checkpoint saved to {checkpoint_path}")
-        if is_best_bleu:
-            logger.info(f"New best model (BLEU: {best_val_bleu:.2f}) saved to {os.path.join(experiment_dir, 'checkpoints', 'best_model.pt')}")
-
-
-    if use_wandb:
-        wandb.finish()
-    logger.info("Training complete.")
-
-
-if __name__ == "__main__":
-    main()
+    config = load_config(Path(args.config_dir))
+    trainer = Trainer(args, config)
+    trainer.run()

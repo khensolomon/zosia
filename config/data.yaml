@@ -1,0 +1,49 @@
+# config/data.yaml
+# Manages all data sources, paths, and preprocessing settings.
+# This file is crucial for the flexible data pipeline.
+
+# Inherits base paths from default.yaml
+defaults:
+  - default
+
+# --- Language Pair Definition ---
+# Defines the language codes to be used throughout the project.
+languages:
+  - "en" # English
+  - "zo" # Zolai
+
+# --- Path Configurations for Datasets ---
+# Specifies locations for different types of data.
+data_paths:
+  # Raw parallel data (bi-texts)
+  # The 'index.yaml' in this directory will control which files are used.
+  parallel_base: "${paths.data}/parallel_base"
+
+  # Raw monolingual data (for language modeling or tokenizer training)
+  # The 'index.yaml' in this directory will control which files are used.
+  monolingual_base: "${paths.data}/monolingual"
+
+  # Directory to save processed data files for training/validation/testing.
+  processed: "${paths.data}/processed"
+
+  # Directory to save trained tokenizers.
+  tokenizers: "${paths.data}/tokenizers"
+
+  # Vocabulary files (if generated separately from tokenizers).
+  vocab: "${paths.data}/vocab"
+
+# --- Data Processing Settings ---
+# Defines how the raw data is split and prepared.
+processing:
+  # Base name for the combined parallel data file before splitting.
+  corpus_name: "parallel_corpus"
+
+  # Train/validation/test split ratio.
+  # The numbers should sum to 1.0.
+  split_ratio:
+    train: 0.9
+    val: 0.05
+    test: 0.05
+
+  # Random seed for shuffling data to ensure reproducible splits.
+  shuffle_seed: 42

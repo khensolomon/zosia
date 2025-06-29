@@ -1,0 +1,24 @@
+# -----------------------------------------------------------------------------
+# File: data/parallel_base/index.yaml
+#
+# Description:
+#   This file acts as a manifest to control which parallel (bilingual)
+#   datasets are included in the processing and training pipeline.
+#
+# Instructions:
+#   - IMPORTANT: To train a good model, you MUST uncomment 'train' and 'val'.
+#   - Add the base name of the file pairs to the 'corpora' list.
+#   - For example, if you have 'animals.en' and 'animals.zo', add 'animals'.
+#   - The processing script will automatically look for both the .en and .zo
+#     files corresponding to each base name listed here.
+# -----------------------------------------------------------------------------
+
+corpora:
+  # - "animal"
+  # - "noun"
+  # - "number"
+  # - "place"
+  # - "verb"
+  - "test"
+  - "train"
+  - "val"

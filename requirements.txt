@@ -1,11 +1,29 @@
-torch
-torchvision
-torchaudio
-sentencepiece
-pyyaml
-tqdm
-sacrebleu
-wandb # Optional, only if you plan to use Weights & Biases
-pandas
+# requirements.txt
+# This file lists the Python packages required to run the ZoSia project.
+# Use 'pip install -r requirements.txt' to install them.
 
-pytest # is an excellent choice for Python testing. It's flexible, powerful, and widely adopted.
+# Core ML Framework
+torch>=1.12.0
+
+# Data handling and processing
+numpy>=1.21.0
+pyyaml>=6.0
+
+# Tokenization
+tokenizers>=0.13.0
+
+# Utilities
+tqdm>=4.64.0  # For progress bars
+
+# Notebooks and Analysis
+jupyter
+notebook
+pandas
+seaborn
+matplotlib
+
+# Training and Logging
+tensorboard
+
+# --- Testing ---
+pytest>=7.0.0

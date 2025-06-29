@@ -1,0 +1,20 @@
+# -----------------------------------------------------------------------------
+# File: data/monolingual/zo/index.yaml
+#
+# Description:
+#   This file acts as a manifest to control which Zolai monolingual text
+#   files are used for training the Zolai tokenizer. A larger and more
+#   diverse set of monolingual data will result in a better, more robust
+#   tokenizer.
+#
+# Instructions:
+#   - Add the full filename of each text file to the 'files' list.
+#   - To exclude a file from the next tokenizer training run, comment it out
+#     with a '#'.
+# -----------------------------------------------------------------------------
+
+files:
+  - "bible.txt"
+  - "news.txt"
+  - "monolingual.txt"
+  # - "old_zolai_poems.txt" # This file is currently excluded
