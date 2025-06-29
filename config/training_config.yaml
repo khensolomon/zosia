@@ -23,3 +23,6 @@ experiment_name_prefix: "nmt_run" # Prefix for experiment folder in 'experiments
 use_wandb: True
 wandb_project_name: "ZoSia_NMT"
 wandb_entity: "your_wandb_username" # Replace with your Weights & Biases username
+
+
+log_level: INFO # Or DEBUG, WARNING, ERROR, CRITICAL
