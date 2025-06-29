@@ -35,9 +35,9 @@ This is the core building block of the Transformer. It allows the model to weigh
 * **Scaled Dot-Product Attention:** The fundamental attention mechanism. It calculates attention scores by taking the dot product of a Query vector with Key vectors, scaling by the square root of the dimension of keys, and applying a softmax function. These scores are then used to weight a sum of Value vectors.
 * **Multi-Head:** Instead of performing a single attention function, the Query, Key, and Value vectors are linearly projected `n_heads` times. Each "head" then performs attention in parallel. The results from these multiple heads are concatenated and linearly transformed, allowing the model to jointly attend to information from different representation subspaces at different positions.
 * **Types of Attention in Transformer:**
-    * **Encoder Self-Attention:** In the Encoder layers, each token attends to all other tokens in the *same* source sequence.
-    * **Decoder Self-Attention (Masked):** In the Decoder layers, each token attends to all previous tokens in the *same* target sequence. It's "masked" to prevent attending to future tokens, ensuring causality.
-    * **Encoder-Decoder Attention:** In the Decoder layers, each token attends to all tokens in the *encoded source sequence*. This allows the decoder to focus on relevant parts of the source when generating the target.
+  * **Encoder Self-Attention:** In the Encoder layers, each token attends to all other tokens in the *same* source sequence.
+  * **Decoder Self-Attention (Masked):** In the Decoder layers, each token attends to all previous tokens in the *same* target sequence. It's "masked" to prevent attending to future tokens, ensuring causality.
+  * **Encoder-Decoder Attention:** In the Decoder layers, each token attends to all tokens in the *encoded source sequence*. This allows the decoder to focus on relevant parts of the source when generating the target.
 * **Location in Code:** Implemented in a `MultiHeadAttention` module, used by `EncoderLayer` and `DecoderLayer`.
 
 ### 3.4. Position-wise Feedforward Networks (FFN)
@@ -49,19 +49,19 @@ This is the core building block of the Transformer. It allows the model to weigh
 ### 3.5. Layer Normalization and Residual Connections
 
 * **Residual Connections:** Each sub-layer (attention and FFN) in both the Encoder and Decoder is wrapped in a residual connection, meaning the input to the sub-layer is added to its output. This helps with gradient flow and training deeper networks.
-    * Output = `LayerNorm(x + Sublayer(x))`
-* **Layer Normalization:** Applied after the residual connection. It normalizes the inputs across the features for each sample independently, helping to stabilize training.
-* **Location in Code:** `LayerNorm` modules applied within `EncoderLayer` and `DecoderLayer`.
+  * Output = `LayerNorm(x + Sublayer(x))`
+  * **Layer Normalization:** Applied after the residual connection. It normalizes the inputs across the features for each sample independently, helping to stabilize training.
+  * **Location in Code:** `LayerNorm` modules applied within `EncoderLayer` and `DecoderLayer`.
 
 ### 3.6. Encoder Structure
 
 The Encoder consists of `num_layers` identical Encoder layers.
 
 * **Each Encoder Layer:**
-    1.  Multi-Head Self-Attention
-    2.  Add & LayerNorm
-    3.  Position-wise Feedforward Network
-    4.  Add & LayerNorm
+    1. Multi-Head Self-Attention
+    2. Add & LayerNorm
+    3. Position-wise Feedforward Network
+    4. Add & LayerNorm
 * **Input:** Source token embeddings + positional encodings.
 * **Output:** A sequence of continuous representations, where each representation captures context from the entire source sentence.
 
@@ -70,12 +70,12 @@ The Encoder consists of `num_layers` identical Encoder layers.
 The Decoder consists of `num_layers` identical Decoder layers.
 
 * **Each Decoder Layer:**
-    1.  Masked Multi-Head Self-Attention
-    2.  Add & LayerNorm
-    3.  Multi-Head Encoder-Decoder Attention
-    4.  Add & LayerNorm
-    5.  Position-wise Feedforward Network
-    6.  Add & LayerNorm
+  1. Masked Multi-Head Self-Attention
+  2. Add & LayerNorm
+  3. Multi-Head Encoder-Decoder Attention
+  4. Add & LayerNorm
+  5. Position-wise Feedforward Network
+  6. Add & LayerNorm
 * **Input:** Target token embeddings + positional encodings (shifted right during training for teacher forcing).
 * **Output:** For each output token position, a representation that combines information from the previous target tokens and the entire encoded source sequence. This representation is then passed to a final linear layer to predict the next token.
 
