@@ -1,63 +1,55 @@
-# A simple logging utility.
-
 import logging
 import os
+import sys
 
-def get_logger(name: str, log_level: str = "INFO") -> logging.Logger:
+def get_logger(name):
+    return logging.getLogger(name)
+
+_LOG_LEVEL_MAP = {
+    'DEBUG': logging.DEBUG,
+    'INFO': logging.INFO,
+    'WARNING': logging.WARNING,
+    'ERROR': logging.ERROR,
+    'CRITICAL': logging.CRITICAL,
+}
+
+def setup_logging(log_dir_path, run_log_name, log_level_str="INFO"):
     """
-    Configures and returns a logger instance.
-
+    Sets up logging to console and a file.
     Args:
-        name (str): The name of the logger (usually __name__).
-        log_level (str): The minimum logging level (e.g., "INFO", "DEBUG", "WARNING").
-
-    Returns:
-        logging.Logger: Configured logger object.
+        log_dir_path (str): Directory where log files will be saved.
+        run_log_name (str): Base name for the log file (e.g., 'training').
+        log_level_str (str): Logging level as a string (e.g., 'INFO', 'DEBUG').
     """
-    logger = logging.getLogger(name)
-    logger.setLevel(log_level)
-
-    # Prevent duplicate handlers from being added if get_logger is called multiple times
-    if not logger.handlers:
-        # Console handler
-        console_handler = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        console_handler.setFormatter(formatter)
-        logger.addHandler(console_handler)
-
-    return logger
-
-def setup_logging(log_file_path: str, log_level: str = "INFO"):
-    """
-    Sets up the root logger to log to a file and console.
-    Call this once at the start of your main script.
-
-    Args:
-        log_file_path (str): Full path to the log file.
-        log_level (str): Minimum logging level.
-    """
-    # Ensure the directory exists for the log file
-    log_dir = os.path.dirname(log_file_path)
-    if log_dir and not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+    os.makedirs(log_dir_path, exist_ok=True)
 
     root_logger = logging.getLogger()
+    
+    # Calculate log_level FIRST, outside the 'if' block
+    log_level = _LOG_LEVEL_MAP.get(log_level_str.upper(), logging.INFO)
+
+    # Only add handlers if they haven't been added already
+    if not root_logger.handlers:
+        root_logger.setLevel(logging.DEBUG) # Set to DEBUG to allow all messages to pass to handlers initially
+
+        # Console handler
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        console_handler.setFormatter(console_formatter)
+        console_handler.setLevel(log_level) # Set level for console output
+        root_logger.addHandler(console_handler)
+
+        # File handler
+        log_file_path = os.path.join(log_dir_path, f"{run_log_name}.log")
+        file_handler = logging.FileHandler(log_file_path)
+        file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(file_formatter)
+        file_handler.setLevel(log_level) # Set level for file output
+        root_logger.addHandler(file_handler)
+    
+    # After handlers are potentially added, ensure the root logger's level
+    # and all handlers' levels are set to the desired log_level.
+    # This also handles cases where setup_logging is called again with a new level.
     root_logger.setLevel(log_level)
-
-    # Clear existing handlers to prevent duplicate output if called multiple times
-    for handler in root_logger.handlers[:]:
-        root_logger.removeHandler(handler)
-
-    # File handler
-    file_handler = logging.FileHandler(log_file_path)
-    file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(file_formatter)
-    root_logger.addHandler(file_handler)
-
-    # Console handler (can be configured differently if needed)
-    console_handler = logging.StreamHandler()
-    console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    console_handler.setFormatter(console_formatter)
-    root_logger.addHandler(console_handler)
-
-    root_logger.info(f"Logging initialized. Output will be saved to {log_file_path}")
+    for handler in root_logger.handlers:
+        handler.setLevel(log_level)
