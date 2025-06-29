@@ -3,7 +3,7 @@ name = "zosia"
 version = "0.1.0"
 description = "Zo-English Neural Machine Translation System"
 authors = [
-    { name = "Your Name", email = "your.email@example.com" }
+    { name = "Khen Solomon Lethil", email = "khensolomon@gmail.com" }
 ]
 license = { text = "MIT License" }
 requires-python = ">=3.9"

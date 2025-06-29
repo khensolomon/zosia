@@ -7,21 +7,21 @@ This guide outlines the steps to set up an NMT project on a local machine, prepa
 Before starting, ensure the following software is installed on the local machine:
 
 * **Git:** For cloning the project repository.
-    * [Download Git](https://git-scm.com/downloads)
+  * [Download Git](https://git-scm.com/downloads)
 * **Python (3.8+ recommended):** The programming language for the project.
-    * [Download Python](https://www.python.org/downloads/) (On Windows, consider checking "Add Python to PATH" during installation)
+  * [Download Python](https://www.python.org/downloads/) (On Windows, consider checking "Add Python to PATH" during installation)
 * **pip:** Python's package installer (typically included with Python installations).
 
 ## 2. Project Setup
 
-1.  **Clone the Repository:**
+1. **Clone the Repository:**
     Open a terminal or command prompt and clone the project's Git repository. Replace `<repository_url>` with the actual URL of the project's Git repository.
 
     ```bash
     git clone <repository_url>
     ```
 
-2.  **Navigate into the Project Directory:**
+2. **Navigate into the Project Directory:**
     Change the current directory to the root of the cloned project.
 
     ```bash
@@ -32,24 +32,30 @@ Before starting, ensure the following software is installed on the local machine
 
 Using a virtual environment is highly recommended to manage project dependencies and prevent conflicts with other Python projects.
 
-1.  **Create a Virtual Environment:**
+1. **Create a Virtual Environment:**
+
     ```bash
     python -m venv venv
     ```
+
     (This command creates a folder named `venv` within the project directory to house the virtual environment.)
 
-2.  **Activate the Virtual Environment:**
+2. **Activate the Virtual Environment:**
     * **On Windows:**
+
         ```bash
         .\venv\Scripts\activate
         ```
+
     * **On macOS/Linux:**
+
         ```bash
         source venv/bin/activate
         ```
+
     (The command prompt should display `(venv)` at the beginning, indicating the environment is active.)
 
-3.  **Install Project Dependencies:**
+3. **Install Project Dependencies:**
     Install all required Python packages listed in the `requirements.txt` file.
 
     ```bash
@@ -60,17 +66,18 @@ Using a virtual environment is highly recommended to manage project dependencies
 
 Before training, the raw text data must be tokenized and processed into a format suitable for the model.
 
-1.  **Place Raw Data:**
+1. **Place Raw Data:**
     Ensure raw parallel text files (e.g., `train.zo`, `train.en`, `val.zo`, `val.en`, `test.zo`, `test.en`) are placed within the `data/raw/` directory of the project.
 
     * **Important:** Verify that the `data/raw/base_training.yaml` configuration file correctly specifies the paths to these raw data files and defines the source and target language extensions (e.g., `.zo`, `.en`).
 
-2.  **Run Data Processing Script:**
+2. **Run Data Processing Script:**
     This script will train the SentencePiece tokenizer and subsequently tokenize the raw data, saving the processed token IDs as `.pt` files in the `data/processed/` directory.
 
     ```bash
     python -m src.data.make_dataset
     ```
+
     * **Expected Output:** This command should generate `zosia_sp.model` in `data/vocab/` and files like `train_token_ids.zo.pt`, `train_token_ids.en.pt`, `val_token_ids.zo.pt`, etc., in `data/processed/`.
 
 ## 5. Configuration
@@ -87,10 +94,12 @@ Adjust these parameters as necessary, particularly after increasing the dataset 
 
 Once the data is prepared and dependencies are installed, the training process can be initiated.
 
-1.  **Start Training:**
+1. **Start Training:**
+
     ```bash
-    python -m src.training.trainer
+    python -m src.train.trainer
     ```
+
     * **Logging:** The project is configured to use Weights & Biases (W&B) for tracking. It will likely operate in `offline` mode by default. An option to sync to the cloud may be prompted by W&B.
     * **Monitoring:** Terminal output and W&B logs (if synced) will display training progress, including loss, perplexity, and BLEU score per epoch.
 
@@ -98,14 +107,16 @@ Once the data is prepared and dependencies are installed, the training process c
 
 Evaluation on the validation set is typically integrated into the training loop. Final evaluation on the test set is often performed after training concludes, utilizing the best-performing model checkpoint.
 
-1.  **Automatic Validation:**
-    During the `python -m src.training.trainer` execution, evaluation on the validation set will occur periodically (usually at the end of each epoch).
+1. **Automatic Validation:**
+    During the `python -m src.train.trainer` execution, evaluation on the validation set will occur periodically (usually at the end of each epoch).
 
-2.  **Final Test Set Evaluation (If Separate Script):**
+2. **Final Test Set Evaluation (If Separate Script):**
     If a dedicated script exists for final testing (e.g., `src/inference/evaluate.py` or similar), it would typically be run as follows:
+
     ```bash
     python -m src.inference.evaluate --model_path experiments/nmt_run_YYYYMMDD_HHMMSS/checkpoints/best_model.pt
     ```
+
     (Adjust the path to the best model checkpoint and the script name as necessary.)
 
 ## Troubleshooting Tips
@@ -114,5 +125,3 @@ Evaluation on the validation set is typically integrated into the training loop.
 * **File Not Found errors:** Double-check all file paths specified in `config.yaml` and verify that `make_dataset.py` successfully generated all expected `.pt` files in `data/processed/` and the SentencePiece model in `data/vocab/`.
 * **"N/A samples" in DataLoader summary:** This indicates an issue with data loading. Re-check `src/data/dataset_utils.py` for any errors (e.g., the `sp_model` argument issue previously discussed).
 * **Low BLEU / High PPL:** This is frequently a symptom of **insufficient training data**. NMT models, particularly Transformers, require substantial datasets (minimum tens to hundreds of thousands of parallel sentences) to learn effectively.
-
----

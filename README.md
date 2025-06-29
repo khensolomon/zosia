@@ -33,8 +33,6 @@ To develop a robust and customizable neural machine translation system capable o
   - [7. License](#7-license)
   - [8. Contact](#8-contact)
 
----
-
 ## 1. Getting Started
 
 This section provides a quick guide to setting up the project and preparing data for training. For detailed instructions, refer to the dedicated documentation files.
@@ -64,7 +62,7 @@ Detailed information about the Transformer model architecture, its components (E
 After setting up the environment and preparing the data, model training can be initiated.
 
 ```bash
-python -m src.training.trainer
+python -m src.train.trainer
 ```
 
 For detailed configuration options and advanced training parameters, refer to the relevant sections in the config/ directory.
@@ -76,7 +74,12 @@ For detailed configuration options and advanced training parameters, refer to th
 Example inference command:
 
 ```bash
-python -m src.inference.translator --text "Zo text to translate." --model_path experiments/latest_run/checkpoints/best_model.pt
+python -m src.inference.translator --model_path experiments/latest_run/checkpoints/best_model.pt --text "How are you"
+
+python -m src.inference.translator --model_path experiments/nmt_run_20250628_114934/checkpoints/best_model.pt --text "Dam maw"
+
+python -m src.translate.translator --checkpoint_path experiments/nmt_run_20250628_114934/checkpoints/best_model.pt --sentence "Dam maw"
+
 ```
 
 ## 4. Customization
