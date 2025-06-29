@@ -13,11 +13,17 @@ from tqdm import tqdm
 # CHANGED: Updated import for autocast and GradScaler to the newer `torch.amp` path
 from torch.amp import autocast, GradScaler 
 
+# from src.models.transformer_model import Transformer, Encoder, Decoder
+# from src.data.dataset_utils import get_dataloaders
+# from src.train.evaluator import calculate_bleu
+# from src.utils.general_utils import load_config, setup_logging, get_device, save_checkpoint, load_checkpoint
+# from src.utils.logger import get_logger
+
 from src.models.transformer_model import Transformer, Encoder, Decoder
 from src.data.dataset_utils import get_dataloaders
-from src.training.evaluator import calculate_bleu
-from src.utils.general_utils import load_config, setup_logging, get_device, save_checkpoint, load_checkpoint
-from src.utils.logger import get_logger
+from src.train.evaluator import calculate_bleu
+from src.utils.general_utils import load_config, get_device, save_checkpoint, load_checkpoint 
+from src.utils.logger import get_logger, setup_logging 
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -263,10 +269,23 @@ def main():
     os.makedirs(os.path.join(experiment_dir, "checkpoints"), exist_ok=True)
     os.makedirs(os.path.join(experiment_dir, "logs"), exist_ok=True)
 
+    latest_run_symlink_path = os.path.join(base_output_dir, "latest_run")
+    # Remove existing symlink if it exists to ensure it always points to the *newest* run
+    if os.path.islink(latest_run_symlink_path):
+        os.remove(latest_run_symlink_path)
+        logger.info(f"Removed old '{latest_run_symlink_path}' symlink.")
+    try:
+        os.symlink(os.path.basename(experiment_dir), latest_run_symlink_path, target_is_directory=True)
+        logger.info(f"Created symlink '{latest_run_symlink_path}' pointing to '{os.path.basename(experiment_dir)}'.")
+    except OSError as e:
+        logger.warning(f"Could not create 'latest_run' symlink: {e}")
+
     # setup_logging function needs the base experiment directory to set up file handlers
     log_dir_path = os.path.join(experiment_dir, "logs")
     run_log_name = "training"
     setup_logging(log_dir_path, run_log_name) # Ensure this sets up file logging correctly
+    configured_log_level = training_config.get("log_level", "INFO") # Default to INFO if not specified
+    setup_logging(log_dir_path, run_log_name, configured_log_level) # Pass the level string
 
     logger.info(f"Starting new experiment: {experiment_dir}")
     logger.info(f"Training Config:\n{yaml.dump(training_config, indent=2)}")
