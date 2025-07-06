@@ -1,29 +1,22 @@
-# config/default.yaml
-# This file serves as the base configuration.
-# It defines global project paths and default settings that can be
-# referenced or overridden by other specific configuration files.
-
-# --- Project Paths ---
-# Defines the root directories for major components of the project.
-# Using placeholders like '${paths.root}/data' allows for easy relocation
-# of the entire project.
-
-paths:
-  root: "."              # Project root directory.
-  data: "${paths.root}/data"
-  source_code: "${paths.root}/src"
-  experiments: "${paths.root}/experiments"
-  docs: "${paths.root}/docs"
-  notebooks: "${paths.root}/notebooks"
-
-# --- General Settings ---
-# High-level settings for the project.
+# ./config/default.yaml
+# General project settings and core paths.
 
 project_name: "ZoSia"
-description: "Bidirectional NMT for Zolai (zo) and English (en)"
+description: "A Seq2Seq model for Zolai-English translation."
+version: "0.1.0"
 
-# Default language pair configuration. 'src' is source, 'tgt' is target.
-# This can be overridden during training or inference.
-lang:
-  src: "en"
-  tgt: "zo"
+# Core project paths.
+# These can be overridden by the .env file.
+paths:
+  root: "."
+  data: "${paths.root}/data"
+  source_code: "${paths.root}/zo"
+  experiments: "${paths.root}/experiments"
+  config: "${paths.root}/config"
+  env_file: "${paths.root}/.env"
+
+  # Specific data paths
+  parallel_base: "${paths.data}/parallel_base"
+  monolingual: "${paths.data}/monolingual"
+  templates: "${paths.data}/templates"
+  locale: "${paths.data}/locale"

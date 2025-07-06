@@ -1,33 +1,20 @@
-# config/model.yaml
-# Defines the architecture of the Transformer model.
-# These hyperparameters control the model's size, capacity, and complexity.
+# ./config/model.yaml
+# Hyperparameters for the Seq2Seq model.
 
-# Inherits base settings from default.yaml
 defaults:
   - default
 
-# --- Transformer Model Architecture ---
-model:
-  # The main dimensionality of the model for embeddings and transformer layers.
-  # Must be divisible by num_heads.
-  d_model: 512
+# Can be 'cpu' or 'cuda'. 'auto' will detect automatically.
+device: "auto"
 
-  # The number of parallel attention heads in the multi-head attention mechanism.
-  num_heads: 8
+# --- Model Architecture ---
+# Set attention to true to use the more advanced attention-based decoder.
+attention: true
 
-  # The number of encoder layers in the Transformer stack.
-  num_encoder_layers: 6
+encoder:
+  hidden_size: 256
+  # Other encoder params like num_layers can be added here.
 
-  # The number of decoder layers in the Transformer stack.
-  num_decoder_layers: 6
-
-  # The dimensionality of the inner feed-forward network layer.
-  # A common choice is 4 * d_model.
-  d_ff: 2048
-
-  # The dropout rate applied to various layers to prevent overfitting.
-  dropout: 0.1
-
-  # The maximum length of input/output sequences.
-  # Sentences longer than this will be truncated.
-  max_seq_len: 256
+decoder:
+  hidden_size: 256
+  # Other decoder params can be added here.

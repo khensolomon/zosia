@@ -1,50 +1,23 @@
-# config/training.yaml
-# Contains all hyperparameters and settings related to the training process.
+# ./config/training.yaml
+# Settings for the training process.
 
-# Inherits base settings from default.yaml
-defaults:
-  - default
-
-# --- Training Process Configuration ---
-training:
-  # The number of sentences in each batch.
-  # Adjust based on GPU memory. Start low and increase if possible.
+initial_training:
+  # FIX: Reduced iterations for faster testing cycles.
+  n_iterations: 2000
+  print_every: 500
+  learning_rate: 0.001 # Adam works well with a smaller learning rate
   batch_size: 32
+  # FIX: Added optimizer and gradient clipping settings for stability.
+  optimizer: "adam" # Can be "adam" or "sgd"
+  clip: 1.0        # Gradient clipping value. 1.0 is a common default.
 
-  # The total number of training epochs.
-  num_epochs: 20
+incremental_training:
+  n_iterations: 10000
+  print_every: 500
+  learning_rate: 0.001
+  batch_size: 32
+  optimizer: "adam"
+  clip: 1.0
 
-  # The learning rate for the optimizer.
-  learning_rate: 0.0001
-
-  # Optimizer settings (Adam is a standard choice for Transformers).
-  optimizer:
-    name: "Adam"
-    # Parameters for the Adam optimizer.
-    betas: [0.9, 0.98]
-    eps: 0.000000001
-
-  # Learning rate scheduler settings.
-  # Reduces the learning rate during training to improve convergence.
-  scheduler:
-    # 'warmup_steps' is a common practice for Transformers to stabilize training early on.
-    warmup_steps: 4000
-
-  # Label smoothing helps prevent the model from becoming overconfident.
-  # A value of 0.1 is a common choice.
-  label_smoothing: 0.1
-
-  # Directory to save model checkpoints and training logs.
-  # A subdirectory will be created for each run with a timestamp.
-  experiment_dir: "${paths.experiments}"
-
-  # FIX: New setting for the best model's filename.
-  # Placeholders {src_lang} and {tgt_lang} will be replaced.
-  best_model_filename: "best_model_{src_lang}-{tgt_lang}.pt"
-  
-  # NOTE: The 'save_every_n_epochs' key has been removed as we now only
-  # save the single best model based on validation loss.
-
-  # Number of worker processes for the data loader.
-  # Set to 0 to prevent multiprocessing issues, especially on Windows.
-  num_workers: 0
+checkpoint:
+  filename_template: "${project_name}_{src}-{tgt}_checkpoint.pth"

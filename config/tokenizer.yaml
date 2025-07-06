@@ -1,39 +1,17 @@
-# config/tokenizer.yaml
-# Configuration for building and using the sentence tokenizers.
-# We will use a WordPiece model, similar to BERT, which works well
-# for many languages.
+# ./config/tokenizer.yaml
+# Settings for the tokenizer and vocabulary.
 
-# Inherits base paths from default.yaml
 defaults:
   - default
 
-# --- Tokenizer Settings ---
-# Parameters for training the custom tokenizer.
-tokenizer:
-  # The algorithm to use for tokenization.
-  # Options: "WordPiece", "BPE" (Byte-Pair Encoding), "Unigram".
-  # WordPiece is a good default choice.
-  model_type: "WordPiece"
+# Special tokens used by the model.
+special_tokens:
+  sos: "<SOS>"
+  eos: "<EOS>"
+  pad: "<PAD>"
+  unk: "<UNK>" # For unknown words
 
-  # The target vocabulary size. This is a crucial hyperparameter.
-  # For a low-resource language, a value between 8,000 and 16,000 is a good start.
-  vocab_size: 12000
-
-  # The minimum frequency a token must have to be included in the vocabulary.
-  min_frequency: 2
-
-  # Special tokens required by the Transformer model.
-  # [UNK] = Unknown token
-  # [PAD] = Padding token
-  # [SOS] = Start of Sentence
-  # [EOS] = End of Sentence
-  special_tokens:
-    - "[UNK]"
-    - "[PAD]"
-    - "[SOS]"
-    - "[EOS]"
-
-  # File name for the trained tokenizer. It will be saved in the
-  # directory specified by 'data_paths.tokenizers'.
-  # The '{lang}' placeholder will be replaced by 'en' and 'zo'.
-  tokenizer_file: "tokenizer_{lang}.json"
+# Dynamic calculation of max length based on the dataset.
+# A fixed value can be set here to override it.
+# max_length: 50
+max_length: "auto"
