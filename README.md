@@ -1,108 +1,131 @@
-# ZOSIA: ZO-EN Neural Machine Translation (NMT) System
+# ZoSia: A Zolai-English Translation Project
 
-## Project Goal
-
-To develop a robust and customizable neural machine translation system capable of accurately translating text between Zo (ZO) and English (EN) in both directions (ZO -> EN and EN -> ZO). This project focuses on building a high-quality NMT system for a low-resource language like Zo, emphasizing modularity, customizability, and clear documentation.
+This project contains a complete pipeline for training a neural machine translation (NMT) model for Zolai and English, based on a Seq2Seq architecture with an attention mechanism. It also includes several command-line tools for translation, suggestions, and language detection.
 
 ## Features
 
-* **Modular Architecture:** Utilizes a standard Transformer-based sequence-to-sequence model.
-* **Customizable Training:** Configurable hyperparameters for data processing, model architecture, and training routines via YAML files.
-* **Subword Tokenization:** Employs SentencePiece for efficient and robust tokenization suitable for various languages.
-* **Experiment Tracking:** Integrates with Weights & Biases (W&B) for comprehensive experiment logging and visualization.
-* **Comprehensive Documentation:** Detailed guides for setup, data preparation, and project structure are provided in the `docs/` directory.
+- **Bidirectional Training:** Train separate, optimized models for both Zolai-to-English (`zo-en`) and English-to-Zolai (`en-zo`) translation.
+- **Attention Mechanism:** Utilizes a Bahdanau-style attention mechanism for improved handling of long sentences.
+- **Config-Driven:** All settings, paths, and hyperparameters are managed via YAML configuration files in the `/config` directory.
+- **Automatic Language Detection:** User-facing tools can automatically detect the input language (`zo` or `en`).
+- **Command-Line Tools:**
+    - `translate.py`: Translate text with auto-detection.
+    - `suggest.py`: Get monolingual autocomplete suggestions.
+    - `detector.py`: A standalone language identification tool.
 
-## Table of Contents
+---
 
-- [ZOSIA: ZO-EN Neural Machine Translation (NMT) System](#zosia-zo-en-neural-machine-translation-nmt-system)
-  - [Project Goal](#project-goal)
-  - [Features](#features)
-  - [Table of Contents](#table-of-contents)
-  - [1. Getting Started](#1-getting-started)
-    - [1.1. Setup and Environment](#11-setup-and-environment)
-    - [1.2. Data Preparation](#12-data-preparation)
-  - [2. Project Structure \& Model Architecture](#2-project-structure--model-architecture)
-    - [2.1. Directory Structure Overview](#21-directory-structure-overview)
-    - [2.2. Model Architecture Details](#22-model-architecture-details)
-  - [3. Usage](#3-usage)
-    - [3.1. Training the Model](#31-training-the-model)
-    - [3.2. Running Inference (Translation)](#32-running-inference-translation)
-  - [4. Customization](#4-customization)
-  - [5. Key Technologies](#5-key-technologies)
-  - [6. Contributing](#6-contributing)
-  - [7. License](#7-license)
-  - [8. Contact](#8-contact)
+## 1. Project Setup
 
-## 1. Getting Started
+Follow these steps to set up your local development environment.
 
-This section provides a quick guide to setting up the project and preparing data for training. For detailed instructions, refer to the dedicated documentation files.
+### Step 1: Clone the Repository
 
-### 1.1. Setup and Environment
-
-Information on prerequisites, repository cloning, virtual environment creation, and dependency installation is available in the [Setup Guide](docs/setup_guide.md).
-
-### 1.2. Data Preparation
-
-Instructions for collecting, cleaning, formatting, and processing Zo-English parallel and monolingual data are provided in the [Data Preparation Guide](docs/data_preparation_guide.md). It is crucial that data is correctly prepared before training.
-
-## 2. Project Structure & Model Architecture
-
-### 2.1. Directory Structure Overview
-
-A high-level overview of the project's modular and organized directory structure can be found in the [Project Overview](docs/project_overview.md).
-
-### 2.2. Model Architecture Details
-
-Detailed information about the Transformer model architecture, its components (Encoder, Decoder, Attention mechanisms), and their implementation is available in the [Model Architecture documentation](docs/model_architecture.md).
-
-## 3. Usage
-
-### 3.1. Training the Model
-
-After setting up the environment and preparing the data, model training can be initiated.
+First, clone the project to your local machine.
 
 ```bash
-python -m src.train.trainer
+git clone <your-repository-url>
+cd zosia
 ```
 
-For detailed configuration options and advanced training parameters, refer to the relevant sections in the config/ directory.
+### Step 2: Create and Activate a Virtual Environment
 
-### 3.2. Running Inference (Translation)
-
-(Detailed instructions will be added here once src/inference/translator.py is implemented and documented.)
-
-Example inference command:
+It is highly recommended to use a virtual environment to manage project dependencies.
 
 ```bash
-python -m src.inference.translator --model_path experiments/latest_run/checkpoints/best_model.pt --text "How are you"
+# Create the virtual environment
+python -m venv venv
 
-python -m src.inference.translator --model_path experiments/nmt_run_20250628_114934/checkpoints/best_model.pt --text "Dam maw"
-
-python -m src.translate.translator --checkpoint_path experiments/nmt_run_20250628_114934/checkpoints/best_model.pt --sentence "Dam maw"
-
+# Activate it
+# On Windows:
+.\venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
 ```
 
-## 4. Customization
+### Step 3: Install Dependencies
 
-The system's behavior, including data processing, model hyperparameters, and training routines, can be customized by modifying the YAML configuration files located in the config/ directory. Refer to the documentation within those files for specific parameters.
+Install all required packages for development, including testing and analysis tools. This command installs everything from both `requirements.txt` and `requirements-dev.txt`.
 
-## 5. Key Technologies
+```bash
+pip install -r requirements-dev.txt
+```
 
-* Python: Primary programming language.
-* PyTorch: Deep learning framework.
-* SentencePiece: For efficient subword (BPE/Unigram) tokenization.
-* Weights & Biases (W&B): For comprehensive experiment tracking and visualization.
-* Pandas & NumPy: For data manipulation and numerical operations.
-* Tqdm: For displaying progress bars during long-running operations.
+---
 
-## 6. Contributing
+## 2. Initial Data Preparation
 
-Contributions are welcome! Please refer to CONTRIBUTING.md (to be created) for guidelines.
+Before training the models, you must generate the language profiles needed for the automatic language detector.
 
-## 7. License
+Run the following command from the project's root directory:
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+```bash
+python -m scripts.build_profiles
+```
 
-## 8. Contact
+This will read the raw text data from `./data/parallel_base/` and create `en.profile.json` and `zo.profile.json` inside the `./data/locale/` directory. You only need to do this once, or whenever your raw data changes significantly.
 
-For questions or collaborations, please reach out to [issues](https://github.com/khensolomon/zosia/issues).
+---
+
+## 3. Training the Models
+
+You need to train two separate models for bidirectional translation.
+
+### Train the Zolai-to-English Model
+
+```bash
+python -m zo.sia.main --source zo --target en
+```
+
+### Train the English-to-Zolai Model
+
+```bash
+python -m zo.sia.main --source en --target zo
+```
+
+After each command completes, a `.pth` checkpoint file will be saved in the `./experiments/` directory (e.g., `ZoSia_zo-en_checkpoint.pth`).
+
+---
+
+## 4. Using the Command-Line Tools
+
+Once the models are trained, you can use the following tools.
+
+### `translate.py`
+
+Translates text. It will auto-detect the language if not specified.
+
+```bash
+# Auto-detect language
+python -m zo.sia.translate --text "kei hong paita"
+python -m zo.sia.translate --text "how are you"
+
+# Manually specify direction
+python -m zo.sia.translate --source en --target zo --text "hello world"
+
+# Start interactive mode
+python -m zo.sia.translate
+```
+
+### `suggest.py`
+
+Provides monolingual autocomplete suggestions.
+
+```bash
+# Auto-detect language of the prefix
+python -m zo.sia.suggest --text "how are"
+
+# Manually specify language
+python -m zo.sia.suggest --lang zo --text "hong paita"
+```
+
+### `detector.py`
+
+A standalone tool to test the language detector.
+
+```bash
+# Run a specific test
+python -m zo.sia.detector --text "zomi"
+
+# Run the built-in demonstration
+python -m zo.sia.detector
