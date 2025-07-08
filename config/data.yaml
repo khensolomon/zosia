@@ -4,14 +4,30 @@
 
 defaults:
   - default
-
-# Describes the data sources to be used.
-# The data loader will look for an index.yaml in each source path.
+  
 sources:
   - name: "parallel_base"
     path: "${paths.parallel_base}"
-  # - name: "templates"
-  #   path: "${paths.templates}"
+    # No 'use_for_direction' key means this high-quality parallel data is
+    # used for all training directions (e.g., zo-en and en-zo).
+
+  - name: "synthetic_zo-en"
+    path: "${paths.root}/data/synthetic/zo-en"
+    # This data was created by translating Zolai TO English (zo->en).
+    # The goal of this data is to improve the model's ability to WRITE Zolai.
+    # Therefore, we only use it when Zolai is the TARGET language.
+    use_for_direction: "en-zo"
+
+  - name: "synthetic_en-zo"
+    path: "${paths.root}/data/synthetic/en-zo"
+    # This data was created by translating English TO Zolai (en->zo).
+    # The goal of this data is to improve the model's ability to WRITE English.
+    # Therefore, we only use it when English is the TARGET language.
+    use_for_direction: "zo-en"
+    
+  - name: "templates"
+    path: "${paths.templates}"
+    # This source also has no direction, so it will be loaded for any run.
 
 # Preprocessing settings applied to all loaded data.
 preprocessing:

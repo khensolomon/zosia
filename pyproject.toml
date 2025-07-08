@@ -4,7 +4,7 @@
 
 [project]
 name = "zosia"
-version = "0.1.0"
+version = "0.1.1"
 description = "Bidirectional Machine Translation for Zolai and English (Zo <-> En)"
 authors = [
     { name = "Khen Solomon Lethil", email = "khensolomon@gmail.com" },

@@ -3,20 +3,24 @@
 
 project_name: "ZoSia"
 description: "A Seq2Seq model for Zolai-English translation."
-version: "0.1.0"
+version: "0.1.1"
+
+# The single source of truth for all languages supported by the project.
+# All scripts will read from this list automatically.
+supported_languages:
+  - en
+  - zo
 
 # Core project paths.
 # These can be overridden by the .env file.
 paths:
   root: "."
   data: "${paths.root}/data"
+  monolingual: "${paths.data}/monolingual"
+  # FIX: Added the missing path definitions.
+  parallel_base: "${paths.data}/parallel_base"
+  templates: "${paths.data}/templates"
   source_code: "${paths.root}/zo"
   experiments: "${paths.root}/experiments"
   config: "${paths.root}/config"
   env_file: "${paths.root}/.env"
-
-  # Specific data paths
-  parallel_base: "${paths.data}/parallel_base"
-  monolingual: "${paths.data}/monolingual"
-  templates: "${paths.data}/templates"
-  locale: "${paths.data}/locale"

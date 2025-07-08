@@ -5,12 +5,11 @@ name: "parallel_base"
 description: "Core parallel corpus for Zolai-English."
 type: "parallel"
 
-# Defines the language pairs for the training set.
+# Defines the language pairs for the training set by their base name.
+# The script will automatically look for .zo and .en extensions.
 train_pairs:
-  - zo: "word.zo"
-    en: "word.en"
+  - word
 
-# Defines the language pairs for the test set, used for evaluation.
+# Defines the language pairs for the test set.
 test_pairs:
-  - zo: "test.zo"
-    en: "test.en"
+  - test

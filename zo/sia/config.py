@@ -2,25 +2,12 @@
 #
 # What it does:
 # This module provides a single function, `load_config`, to handle all project
-# configurations. It loads `default.yaml` as the base, then loads every other
-# .yaml file from the `/config` directory into its own top-level key.
-# Finally, it applies any overrides from the root `.env` file.
+# configurations. It has been updated to be more robust by loading files
+# relative to the current working directory.
 #
 # Why it's used:
-# It centralizes all configuration logic, creating a clean separation between
-# the application code and its settings. This allows for easy management of
-# different environments and prevents hard-coding values.
-#
-# How to use it:
-# From any other script, import and call the function:
-#
-#   from zo.sia.config import load_config
-#   config = load_config()
-#
-# The function returns an `addict.Dict` object, which allows for easy,
-# attribute-style access to nested configuration values (e.g., `config.data.sources`).
-#
-# Dependencies: PyYAML, python-dotenv, addict
+# This makes the configuration system behave like a standard command-line tool,
+# which is essential for our testing pipeline and for predictable behavior.
 
 import os
 import yaml
@@ -93,28 +80,25 @@ def _apply_env_overrides(config, env_file_path):
 
 def load_config():
     """
-    Loads all configurations.
-    1. Loads default.yaml as the base.
-    2. Loads other .yaml files into keys named after the file.
-    3. Applies overrides from the .env file.
-    4. Resolves path variables (e.g., ${paths.root}).
-    5. Returns the final configuration as an addict.Dict.
+    Loads all configurations relative to the current working directory.
     """
-    script_dir = os.path.dirname(__file__)
-    config_dir = os.path.abspath(os.path.join(script_dir, '..', '..', 'config'))
-    root_dir = os.path.abspath(os.path.join(script_dir, '..', '..'))
-
+    # FIX: Use the current working directory as the project root.
+    # This ensures that the script correctly finds the config and .env files
+    # both in regular execution and during testing.
+    root_dir = os.getcwd()
+    config_dir = os.path.join(root_dir, 'config')
+    
     if not os.path.isdir(config_dir):
         raise FileNotFoundError(f"Configuration directory not found at: {config_dir}")
 
-    # 1. Load default.yaml as the base
+    # Load default.yaml as the base
     merged_config = {}
     default_path = os.path.join(config_dir, 'default.yaml')
     if os.path.exists(default_path):
         with open(default_path, 'r') as f:
             merged_config = yaml.safe_load(f) or {}
 
-    # 2. Load other yaml files into keys named after the file
+    # Load other yaml files into keys named after the file
     for filename in os.listdir(config_dir):
         if filename.endswith((".yaml", ".yml")) and filename != 'default.yaml':
             file_path = os.path.join(config_dir, filename)
@@ -122,21 +106,25 @@ def load_config():
             with open(file_path, 'r') as f:
                 yaml_content = yaml.safe_load(f)
                 if yaml_content:
-                    merged_config[config_key] = yaml_content
+                    # If a key already exists, merge deeply, otherwise set it.
+                    if config_key in merged_config and isinstance(merged_config[config_key], dict):
+                         _deep_merge(yaml_content, merged_config[config_key])
+                    else:
+                        merged_config[config_key] = yaml_content
 
-    # 3. Apply .env overrides before resolving variables
+    # Apply .env overrides from the root directory
     env_file_path = os.path.join(root_dir, '.env')
     config_with_overrides = _apply_env_overrides(merged_config, env_file_path)
 
-    # 4. Resolve variables
+    # Resolve variables
     final_config = _resolve_variables(config_with_overrides)
 
-    # 5. Convert to addict.Dict
     return Dict(final_config)
 
 if __name__ == '__main__':
     print("--- Demonstrating zo/sia/config.py ---")
     try:
+        # To run this directly, you must be in the project's root directory
         config = load_config()
         print("Configuration loaded successfully!")
         print(f"Project Name: {config.project_name}")
