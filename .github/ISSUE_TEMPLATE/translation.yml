@@ -2,7 +2,6 @@ name: Submit Translation
 description: Submit a new translation task
 title: "[Translation] "
 labels: [translation]
-type: issue
 body:
   - type: input
     id: source
