@@ -18,3 +18,11 @@ body:
       placeholder: English
     validations:
       required: true
+      
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes or Explanation (optional)
+      placeholder: Grammar notes, ambiguity, or why you chose this phrase.
+    validations:
+      required: false
