@@ -2,12 +2,13 @@ name: Submit Translation
 description: Submit a new translation task
 title: "[Translation] "
 labels: [translation]
+type: issue
 body:
   - type: input
     id: source
     attributes:
       label: Zolai (Source Text)
-      placeholder: Zolai
+      placeholder: Enter source sentence in Zolai
     validations:
       required: true
 
@@ -15,14 +16,15 @@ body:
     id: target
     attributes:
       label: English (Target Text)
-      placeholder: English
+      placeholder: Enter translated sentence in English
     validations:
       required: true
 
   - type: textarea
     id: notes
     attributes:
-      label: Notes or Explanation (optional)
-      placeholder: Grammar notes, ambiguity, or why you chose this phrase.
+      label: Notes or Explanation (Optional)
+      description: Explain grammar, ambiguity, or context if needed
+      placeholder: Grammar notes, ambiguity, reasoning, etc.
     validations:
       required: false
