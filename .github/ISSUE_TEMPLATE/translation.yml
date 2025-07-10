@@ -4,31 +4,17 @@ title: "[Translation] "
 labels: [translation]
 body:
   - type: input
-    id: language
-    attributes:
-      label: Target Language
-      placeholder: e.g. Zomi, Spanish, Hindi
-    validations:
-      required: true
-
-  - type: textarea
     id: source
     attributes:
-      label: Source Text
-      placeholder: Paste the source text here
+      label: Source Language
+      placeholder: Zolai
     validations:
       required: true
 
-  - type: textarea
-    id: translation
+  - type: input
+    id: target
     attributes:
-      label: Translation
-      placeholder: Enter your translation here
+      label: Target Text
+      placeholder: English
     validations:
       required: true
-
-  - type: textarea
-    id: notes
-    attributes:
-      label: Notes (optional)
-      placeholder: Grammar decisions, unclear meanings, etc.
