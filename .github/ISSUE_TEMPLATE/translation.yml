@@ -2,6 +2,7 @@ name: Submit Translation
 description: Submit a new translation task
 title: "[Translation] "
 labels: [translation]
+type: issue
 body:
   - type: input
     id: source
@@ -18,7 +19,7 @@ body:
       placeholder: English
     validations:
       required: true
-      
+
   - type: textarea
     id: notes
     attributes:
