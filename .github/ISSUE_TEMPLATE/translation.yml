@@ -3,7 +3,7 @@ description: Submit a new translation task
 title: "[Translation] "
 labels: [translation]
 body:
-  - type: input
+  - type: textarea
     id: source
     attributes:
       label: Zolai (Source Text)
@@ -11,7 +11,7 @@ body:
     validations:
       required: true
 
-  - type: input
+  - type: textarea
     id: target
     attributes:
       label: English (Target Text)
