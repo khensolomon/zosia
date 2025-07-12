@@ -1,23 +1,21 @@
 name: Submit Translation
-description: Submit a new translation task
-title: "{{ inputs.source }}"
+description: Enter the Zolai source sentence in the title field
+
 labels: [translation]
+
 body:
-  - type: input
-    id: source
+  - type: markdown
     attributes:
-      label: Zolai (Source Text)
-      description: Enter the phrase or sentence to translate
-      placeholder: e.g. Zolai text here
-    validations:
-      required: true
+      value: |
+        ## 📌 Instructions
+        🔤 **Enter the Zolai (source) sentence as the issue title above.**  
+        💬 Then fill in the English translation and any notes below.
 
   - type: input
     id: target
     attributes:
       label: English (Target Text)
-      description: Your best translation of the source
-      placeholder: e.g. English translation
+      placeholder: e.g. This is my house.
     validations:
       required: true
 
@@ -25,6 +23,6 @@ body:
     id: notes
     attributes:
       label: Notes or Explanation (optional)
-      placeholder: Grammar notes, ambiguity, or why you chose this phrase.
+      placeholder: Grammar, structure, alternate meanings...
     validations:
       required: false
