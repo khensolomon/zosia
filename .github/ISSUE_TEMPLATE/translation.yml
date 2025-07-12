@@ -14,7 +14,7 @@ body:
   - type: input
     id: target
     attributes:
-      label: English (Target Text)
+      label: English
       placeholder: e.g. This is my house.
     validations:
       required: true
@@ -22,7 +22,7 @@ body:
   - type: textarea
     id: notes
     attributes:
-      label: Notes or Explanation (optional)
+      label: Notes
       placeholder: Grammar, structure, alternate meanings...
     validations:
       required: false
