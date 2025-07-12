@@ -1,21 +1,21 @@
 name: Submit Translation
-description: Enter the Zolai source sentence in the title field
-
+description: Submit a new translation task
 labels: [translation]
-
+# title: "[Zolai]"
 body:
   - type: markdown
     attributes:
       value: |
-        ## 📌 Instructions
-        🔤 **Enter the Zolai (source) sentence as the issue title above.**  
-        💬 Then fill in the English translation and any notes below.
+        ## Instructions
+        **Enter the Zolai (source) sentence as the issue title above.**  
+        Then fill in the English translation and any notes below.
+        zo: 💬 Hih ka inn hi -> en: 💬 This is my house.
 
   - type: input
     id: target
     attributes:
       label: English (Target Text)
-      placeholder: e.g. This is my house.
+      placeholder: e.g. Hih ka inn hi -> This is my house.
     validations:
       required: true
 
