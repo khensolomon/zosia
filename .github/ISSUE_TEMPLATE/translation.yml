@@ -7,15 +7,15 @@ body:
     attributes:
       value: |
         ## Instructions
-        **Enter the Zolai (source) sentence as the issue title above.**  
+        **Enter the Zolai (Source Text) sentence as the issue title above.**  
         Then fill in the English translation and any notes below.
-        zo: 💬 Hih ka inn hi -> en: 💬 This is my house.
+        **zo**: 💬 Hih ka inn hi -> **en**: 💬 This is my house.
 
   - type: input
     id: target
     attributes:
       label: English (Target Text)
-      placeholder: e.g. Hih ka inn hi -> This is my house.
+      placeholder: e.g. This is my house.
     validations:
       required: true
 
