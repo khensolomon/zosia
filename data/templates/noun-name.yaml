@@ -1,0 +1,26 @@
+# ./noun-name.yaml
+# Settings noun template
+
+NOUN:
+  - Solomon
+  - Alex
+  - Maria
+  - David
+  - Sophia
+
+en:
+  - my name is <NOUN>
+  - i am <NOUN>
+  - people call me <NOUN>
+  - her name is <NOUN>
+  - his name is <NOUN>
+  - what is your name
+
+
+zo:
+  - ka min pen <NOUN> hi
+  - kei <NOUN> ka hi
+  - mite in <NOUN> hong ci
+  - a min pen <NOUN> hi
+  - a min pen <NOUN> hi
+  - na min bang ahi hiam

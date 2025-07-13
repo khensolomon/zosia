@@ -8,7 +8,11 @@ type: "parallel"
 # Defines the language pairs for the training set by their base name.
 # The script will automatically look for .zo and .en extensions.
 train_pairs:
-  - word
+  - phrase
+  - noun-name
+  - noun-place
+  # - word
+  # - bsb-tedim
 
 # Defines the language pairs for the test set.
 test_pairs:

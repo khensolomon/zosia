@@ -1,0 +1,18 @@
+# ./noun-place.yaml
+# Settings noun template
+
+NOUN:
+  - USA
+  - America
+  - Africa
+  - Mexico
+
+en:
+  - i am going to <NOUN>
+  - i want to go to <NOUN>
+  - i love to live in <NOUN>
+
+zo:
+  - kei <NOUN> ah pai ding
+  - kei <NOUN> ah pai nuam
+  - kei <NOUN> ah ten nuamsa ing
