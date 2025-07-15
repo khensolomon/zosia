@@ -1,23 +1,14 @@
 # scripts/back_translate.py
 #
 # What it does:
-# This script creates a synthetic parallel dataset from monolingual text using
-# a pre-trained translation model. It now generates the new, cleaner index.yaml
-# format for the output directory.
+# This script has been made more robust. It now safely handles cases where
+# an index.yaml file might be empty or missing expected keys, preventing crashes.
 #
 # How to use it:
-# The command is the same. The output index.yaml will be in the new format.
+# The command is the same. It will now run without errors even if the input
+# directory has an empty or incomplete index file.
 #
 #   python -m scripts.back_translate --source zo --target en
-#
-#   # Manually override a specific path
-#   python -m scripts.back_translate --source zo --target en --output_dir ./data/temp_synthetic/
-#   python -m scripts.back_translate \
-#       --model ./experiments/ZoSia_zo-en_checkpoint.pth \
-#       --input_dir ./data/monolingual/zo/ \
-#       --output_dir ./data/synthetic/en-from-zo/ \
-#       --source zo \
-#       --target en
 
 import torch
 import argparse
@@ -58,7 +49,8 @@ def back_translate(args):
         
     with open(index_path, 'r', encoding='utf-8') as f:
         try:
-            index_data = yaml.safe_load(f)
+            index_data = yaml.safe_load(f) or {} # FIX: Default to empty dict
+            # FIX: Use .get() with an empty list as default to prevent errors
             input_files = index_data.get('files', [])
             if not input_files:
                  print(f"Warning: No files listed in {index_path}. Nothing to do.")
@@ -95,9 +87,7 @@ def back_translate(args):
 
         base_name = os.path.splitext(filename)[0]
         
-        # The translated text becomes the new "target" language file
         output_translated_path = os.path.join(args.output_dir, f"{base_name}.{args.target}")
-        # The original monolingual text becomes the new "source" language file
         output_original_path = os.path.join(args.output_dir, f"{base_name}.{args.source}")
 
         with open(output_translated_path, 'w', encoding='utf-8') as f:
@@ -115,7 +105,6 @@ def back_translate(args):
         "name": f"synthetic-{args.source}-to-{args.target}",
         "description": f"Synthetic parallel data generated via back-translation from '{args.input_dir}'.",
         "type": "parallel",
-        # FIX: Save the list of basenames in the new, cleaner format.
         "train_pairs": generated_basenames
     }
     

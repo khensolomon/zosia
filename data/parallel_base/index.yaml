@@ -9,8 +9,6 @@ type: "parallel"
 # The script will automatically look for .zo and .en extensions.
 train_pairs:
   - phrase
-  - noun-name
-  - noun-place
   # - word
   # - bsb-tedim
 
