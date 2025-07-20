@@ -1,7 +1,6 @@
-# ./noun-name.yaml
-# Settings noun template
+# ./data/templates/noun-name.yaml
 
-NOUN:
+name:
   - Solomon
   - Alex
   - Maria
@@ -17,21 +16,66 @@ NOUN:
   - Nuno
   - Lianneu
   - Thawm Kham
-  - Pauno
+  - Lengtong Pauno
+  - Lengtong Kam Khen
+  - Lethil
+  - Kap Lian Huam
+  - Pau Lian Sian
+
+place:
+  - USA
+  - America
+  - Africa
+  - Mexico
+  - Kawlgam
+  - Zanggam
+  - Khamtung
+  - Tedim
+  - Tongzang
+  - Kawlpi
+  - Nahnuai
+  - Yangon
+  - Mandalay
 
 en:
-  - my name is <NOUN>
-  - i am <NOUN>
-  - people call me <NOUN>
-  - her name is <NOUN>
-  - his name is <NOUN>
+  - my name is <name>
+  - i am <name>
+  - people call me <name>
+  - her name is <name>
+  - his name is <name>
   - what is your name
+  - <name> like to go to <place>
+  - he is going to <place>
 
+  - i am going to <place>
+  - i want to go to <place>
+  - i love to live in <place>
 
 zo:
-  - ka min pen <NOUN> hi
-  - kei <NOUN> ka hi
-  - mite in <NOUN> hong ci
-  - a min pen <NOUN> hi
-  - a min pen <NOUN> hi
+  - ka min pen <name> hi
+  - kei <name> ka hi
+  - mite in <name> hong ci
+  - a min pen <name> hi
+  - a min pen <name> hi
   - na min bang ahi hiam
+  - <name> pen <place> ah painuam hi
+  - amah pen <place> pai ding hi
+
+  - kei <place> ah pai ding
+  - kei <place> ah pai nuam
+  - kei <place> ah ten nuamsa ing
+
+# FIX: Enclose "no" in quotes to treat it as a string, not a boolean.
+"no":
+  - mitt navn er <name>
+  - jeg er <name>
+  - folk kaller meg <name>
+  - hennes navn er <name>
+  - hans navn er <name>
+  - hva heter du?
+  - <name> liker å dra til <place>
+  - han skal til <place>
+    
+  - jeg skal til <place>
+  - jeg vil dra til <place>
+  - jeg elsker å bo på <place>

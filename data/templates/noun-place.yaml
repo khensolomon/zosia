@@ -2,17 +2,13 @@
 # Settings noun template
 
 NOUN:
-  - USA
-  - America
-  - Africa
-  - Mexico
+  - Vokvak
 
 en:
-  - i am going to <NOUN>
-  - i want to go to <NOUN>
-  - i love to live in <NOUN>
+  - i may live in <NOUN>
 
 zo:
-  - kei <NOUN> ah pai ding
-  - kei <NOUN> ah pai nuam
-  - kei <NOUN> ah ten nuamsa ing
+  - kei <NOUN> teng thei mai tak
+
+no:
+  - jeg bor kanskje i <NOUN>
