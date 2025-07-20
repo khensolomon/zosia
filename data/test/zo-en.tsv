@@ -1,0 +1,11 @@
+# ./data/test/zo-en.tsv
+# This file is for evaluating the Zomi to English model.
+# It should contain sentences that the model has NOT been trained on.
+kei hong paita	I am coming
+hong paita	is coming
+hoih	good
+kei	I
+nang	you
+ka min pen Solomon hi	my name is Solomon
+kei Thomas ka hi	i am Thomas
+mite in Lethil hong ci	people call me Lethil
