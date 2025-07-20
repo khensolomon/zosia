@@ -1,6 +1,6 @@
 # Custom
 *.v[0-9]*
-/tmp
+tmp
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
