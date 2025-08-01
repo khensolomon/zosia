@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 """
-Bible Core Library
-==================
+Bible Core Configuration Library
+================================
 
 Description:
 ------------
@@ -12,18 +12,15 @@ Bible processing scripts. It provides a centralized place for common data and
 functions, such as book name-to-number mappings and verse ID parsing logic.
 
 Do not run this script directly. Instead, import its components into other
-executable scripts.
+executable scripts (e.g., align.py, parallel.py).
 
-Example Import:
----------------
-from _bible_core import BOOK_NAME_TO_NUMBER_MAP, parse_verse_id
+This file should be in the same directory as the scripts that import it.
 """
 
 import re
 
-# This dictionary maps the standard 3-letter book abbreviations to their 
-# corresponding numeric key used in the 'whole_bible.json' format.
-# This is crucial for cross-referencing between different Bible versions.
+# This dictionary maps the standard 3-letter book abbreviations and their aliases
+# to their corresponding numeric key used in the 'whole_bible.json' format.
 BOOK_NAME_TO_NUMBER_MAP = {
     "GEN": "1", "EXO": "2", "LEV": "3", "NUM": "4", "DEU": "5", "JOS": "6", "JDG": "7", "RUT": "8", "1SA": "9",
     "2SA": "10", "1KI": "11", "2KI": "12", "1CH": "13", "2CH": "14", "EZR": "15", "NEH": "16", "EST": "17",
@@ -34,10 +31,15 @@ BOOK_NAME_TO_NUMBER_MAP = {
     "PHP": "50", "COL": "51", "1TH": "52", "2TH": "53", "1TI": "54", "2TI": "55", "TIT": "56", "PHM": "57",
     "HEB": "58", "JAS": "59", "1PE": "60", "2PE": "61", "1JN": "62", "2JN": "63", "3JN": "64", "JUD": "65",
     "REV": "66",
-    "EZE":"26", "JOEL":"29", "NAH":"34", "PAS":"19"
+    # --- Aliases for flexible matching ---
+    "EZE": "26", 
+    "JOEL": "29", 
+    "NAH": "34", 
+    "PAS": "19"
 }
 
 # A reverse map to convert book numbers back to names for creating the standard ID format.
+# Note: If multiple names map to one number, the last one in the dictionary will be used.
 BOOK_NUMBER_TO_NAME_MAP = {v: k for k, v in BOOK_NAME_TO_NUMBER_MAP.items()}
 
 
@@ -55,11 +57,16 @@ def parse_verse_id(verse_id):
     match = re.match(r'([a-zA-Z0-9]+)\.(\d+):(\d+)', verse_id)
     if match:
         book_short_name, chapter, verse = match.groups()
-        # Normalize the book name from the ID to the 3-letter standard (e.g., Acts -> ACT)
         book_short_name_upper = book_short_name.upper()
-        for key in BOOK_NAME_TO_NUMBER_MAP:
+        
+        # Sort keys by length, longest first, to avoid partial matches (e.g., "JOEL" matching "JOL").
+        sorted_keys = sorted(BOOK_NAME_TO_NUMBER_MAP.keys(), key=len, reverse=True)
+        
+        for key in sorted_keys:
             if book_short_name_upper.startswith(key):
-                return key, chapter, verse
+                # Return the canonical 3-letter key for consistency.
+                canonical_key = BOOK_NUMBER_TO_NAME_MAP[BOOK_NAME_TO_NUMBER_MAP[key]]
+                return canonical_key, chapter, verse
+
     print(f"Warning: Could not parse verse ID: '{verse_id}'")
     return None, None, None
-
