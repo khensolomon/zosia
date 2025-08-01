@@ -1,0 +1,16 @@
+include:
+  slots: "./scripts/template/common_slots.yaml"
+  rules: "./scripts/template/common_rules.yaml"
+
+templates:
+  - name: "see_template"
+    slots: ["subject", "verb", "object"]
+    output_headers: ["EN", "ZO", "GLOSS"]
+    sentence:
+      EN: "{subject} {verb} {object}."
+      ZO: "{subject} {object} {verb}."
+      GLOSS: "{subject} {object} {verb}."
+    logic:
+      verb:
+        lookup: "verb_table"
+        key_path: ["subject", "features", "person"]

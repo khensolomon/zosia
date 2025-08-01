@@ -1,0 +1,47 @@
+# ./data/corpus/datasets.yaml
+# This file acts as an index for all multi-column TSV parallel datasets.
+
+# Default directories for training and testing data files.
+train_dir: ./data/corpus/train
+test_dir: ./data/corpus/test
+
+# --- Shared Datasets ---
+# Files listed here are available to all language pairs unless excluded.
+shared:
+  train:
+    # - bsb-tedim
+    - test
+    - conjunctions-word-en-zo
+    - phrases-en-zo
+    - pronouns-en-zo
+    - words-en-zo
+  test:
+    - test # Assuming 'test.tsv' can be used for multiple directions
+
+# --- Language Pair Definitions ---
+
+# Defines datasets for Zomi to English translation
+zo-en:
+  train:
+    # This direction will use all files from shared:train
+    # plus any specific files listed here.
+    - zo-en-only
+  test:
+    # This will use the test file from shared:test
+    # plus any specific files listed here.
+    - zo-en-only # A test file only for zo-en
+
+# Defines datasets for English to Zolai translation
+en-zo:
+  train:
+    # This direction also inherits from shared:train automatically.
+    - en-zo-only
+  test:
+    - en-zo-only # A test file only for en-zo
+
+# Defines datasets for Zolai to Norwegian translation
+zo-no:
+  train:
+    - zo-no-only
+  test:
+    - zo-no-only

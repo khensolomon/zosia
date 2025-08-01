@@ -1,0 +1,116 @@
+# ./data/templates/glossary-advanced.yaml
+# A practical, scalable example of the advanced template system.
+
+tags: [core, verbs, advanced]
+
+
+import:
+  - metadata.yaml
+  - subjects.yaml
+  - objects.yaml
+  
+# --- 1. GLOSSARY: Parallel lists of words ---
+# All lists under a placeholder MUST have the same number of items.
+subject:
+  en: ["the man", "the woman", "the rock", I, you, he, she]
+  zo: [pasalpa, numeinu, suangtum, kei, nang, amahpa, amahnu]
+  no: [mannen, kvinnen, steinen, jeg, du, han, hun]
+
+object:
+  en: [water, "the dog", "a book", "the cat"]
+  zo: [tui, uipa, "laibu khat", mengcha]
+  no: [vann, hunden, "en bok", katten]
+
+# --- 2. METADATA: Semantic tags for the glossary items ---
+# This section links metadata to the items by their English (source) key.
+metadata:
+  subject:
+    "the man":
+      tags: [animate, 'gender:masculine']
+    "the woman":
+      tags: [animate, 'gender:feminine']
+    "the rock":
+      tags: [inanimate, 'gender:neuter']
+    I:
+      tags: [animate, 'person:first']
+    you:
+      tags: [animate, 'person:second']
+    he:
+      tags: [animate, 'person:third', 'gender:masculine']
+    she:
+      tags: [animate, 'person:third', 'gender:feminine']
+  object:
+    water:
+      tags: [drinkable, inanimate]
+    "the dog":
+      tags: [animal, animate]
+    "a book":
+      tags: [readable, inanimate]
+    "the cat":
+      tags: [animal, animate]
+
+# --- 3. CONDITIONAL PLACEHOLDERS: "Smart" words that adapt ---
+verb_like:
+  # Default translation if no other conditions match
+  default:
+    en: like
+    zo: deih
+    no: liker
+  # Specializations based on the tags of the <object>
+  rules:
+    on_object_tag:
+      - condition:
+          all_of: [drinkable]
+        translations:
+          en: "like to drink"
+          zo: "dawn nuam"
+          no: "liker å drikke"
+      - condition:
+          all_of: [animal]
+        translations:
+          en: "like to play with"
+          zo: "kimawl pih nuam"
+          no: "liker å leke med"
+      - condition:
+          any_of: [readable]
+        translations:
+          en: "like to read"
+          zo: "sim nuam"
+          no: "liker å lese"
+
+# Example of a verb that changes based on the subject's gender (hypothetical)
+verb_agreement:
+  default:
+    en: "is"
+    zo: "hi"
+    no: "er"
+  rules: 
+    on_subject_tag:
+      - condition:
+          all_of: ['person:first']
+        translations:
+          en: "am"
+
+      - condition:
+          all_of: ['person:second']
+        translations:
+          en: "are"
+
+      # 'gender:masculine':
+      #   en: "is1"
+      #   zo: "ahi" # Hypothetical masculine form
+      #   no: "er"
+      # 'gender:feminine':
+      #   en: "is2"
+      #   zo: "ahih" # Hypothetical feminine form
+      #   no: "er"
+
+# --- 4. TEMPLATES: The sentence structures ---
+templates:
+  - en: <subject> <verb_like> <object>.
+    zo: <subject> in <object> <verb_like>.
+    no: <subject> <verb_like> <object>.
+
+  - en: <subject> <verb_agreement> here.
+    zo: <subject> hi <verb_agreement>.
+    no: <subject> <verb_agreement> her.

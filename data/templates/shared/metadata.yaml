@@ -1,0 +1,104 @@
+# ./data/templates/shared/shared_metadata.yaml
+# A reusable set of metadata tags.
+
+metadata:
+  subject:
+    "the man":
+      tags: ['animate', 'gender:masculine', 'person:third']
+    "the woman":
+      tags: ['animate', 'gender:feminine', 'person:third']
+    "the boy":
+      tags: ['animate', 'gender:masculine', 'person:third']
+    "the girl":
+      tags: ['animate', 'gender:feminine', 'person:third']
+    "the rock":
+      tags: ['inanimate', 'gender:neuter']
+    I:
+      tags: ['animate', 'person:first']
+    you:
+      tags: ['animate', 'person:second']
+    he:
+      tags: ['animate', 'gender:masculine', 'person:third']
+    she:
+      tags: ['animate', 'gender:feminine', 'person:third']
+    we:
+      tags: ['animate', 'person:third', we]
+    they:
+      tags: ['animate', 'person:third', they]
+    boy:
+      tags: ['animate', 'gender:masculine', 'person:third']
+    girl:
+      tags: ['animate', 'gender:feminine', 'person:third']
+  object:
+    water:
+      tags: [drinkable, inanimate]
+    "the dog":
+      tags: [animal, animate]
+    "a book":
+      tags: [readable, inanimate]
+    "the cat":
+      tags: [animal, animate]
+
+verb_to_be:
+  default:
+    en: "is"
+    zo: "a"
+    no: "er"
+  rules:
+    on_subject_tag:
+      # This rule uses a simple tag match and is only defined for English.
+      # Zolai and Norwegian will correctly fall back to the default.
+      - condition: 'person:first'
+        translations:
+          en: "am"
+          zo: "ka"
+      - condition: 'person:second'
+        translations:
+          en: "are"
+          zo: "na"
+      - condition:
+          all_of: ['person:third', we]
+        translations:
+          en: "are"
+          zo: "i"
+      - condition:
+          all_of: ['person:third', they]
+        translations:
+          en: "are"
+          # zo: "a"
+
+# "has" is used with
+# He / she / it
+# Or any singular third-person noun (like “the woman”, “the man”, “the boy”)
+# "have" is used with I, you, we, they
+verb_to_have:
+  default:
+    en: "have"
+    zo: "in"
+    no: "har"
+  rules:
+    on_subject_tag:
+      - condition: 'person:third'
+      # - condition:
+      #     all_of: ['person:third']
+        translations:
+          en: "has"      
+
+
+verb_ending:
+  default:
+    en: ""
+    zo: " hi"
+    no: ""
+
+punctuation_fullstop:
+  default:
+    en: "."
+    zo: "."
+    no: "."
+
+punctuation_questionmark:
+  default:
+    en: "?"
+    zo: "?"
+    no: "?"

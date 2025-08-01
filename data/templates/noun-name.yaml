@@ -1,4 +1,7 @@
 # ./data/templates/noun-name.yaml
+# This is a simple template for proper nouns.
+
+tags: [core, proper_nouns, name]
 
 name:
   - Solomon
@@ -19,7 +22,7 @@ name:
   - Lengtong Pauno
   - Lengtong Kam Khen
   - Lethil
-  - Kap Lian Huam
+  - Kap Lian Huam, Lethil
   - Pau Lian Sian
 
 place:
@@ -37,45 +40,49 @@ place:
   - Yangon
   - Mandalay
 
-en:
-  - my name is <name>
-  - i am <name>
-  - people call me <name>
-  - her name is <name>
-  - his name is <name>
-  - what is your name
-  - <name> like to go to <place>
-  - he is going to <place>
-
-  - i am going to <place>
-  - i want to go to <place>
-  - i love to live in <place>
-
-zo:
-  - ka min pen <name> hi
-  - kei <name> ka hi
-  - mite in <name> hong ci
-  - a min pen <name> hi
-  - a min pen <name> hi
-  - na min bang ahi hiam
-  - <name> pen <place> ah painuam hi
-  - amah pen <place> pai ding hi
-
-  - kei <place> ah pai ding
-  - kei <place> ah pai nuam
-  - kei <place> ah ten nuamsa ing
-
 # FIX: Enclose "no" in quotes to treat it as a string, not a boolean.
-"no":
-  - mitt navn er <name>
-  - jeg er <name>
-  - folk kaller meg <name>
-  - hennes navn er <name>
-  - hans navn er <name>
-  - hva heter du?
-  - <name> liker å dra til <place>
-  - han skal til <place>
-    
-  - jeg skal til <place>
-  - jeg vil dra til <place>
-  - jeg elsker å bo på <place>
+templates:
+  - en: my name is <name>.
+    zo: ka min pen <name> hi.
+    no: mitt navn er <name>.
+
+  - en: i am <name>.
+    zo: kei <name> ka hi.
+    no: jeg er <name>.
+
+  - en: people call me <name>.
+    zo: mite in <name> hong ci.
+    no: folk kaller meg <name>.
+
+  - en: his name is <name>.
+    zo: a min pen <name> hi.
+    no: hans navn er <name>.
+
+  - en: her name is <name>.
+    zo: a min pen <name> hi.
+    no: hennes navn er <name>.
+
+
+  - en: what is your name?
+    zo: na min bang ahi hiam?
+    no: hva heter du?
+
+  - en: i love to live in <place>.
+    zo: kei <place> ah ten nuamsa ing.
+    no: jeg elsker å bo på <place>.
+
+  - en: i want to go to <place>.
+    zo: kei <place> ah pai nuam.
+    no: jeg vil dra til <place>.
+
+  - en: i am going to <place>.
+    zo: kei <place> ah pai ding.
+    no: jeg skal til <place>.
+
+  - en: he is going to <place>.
+    zo: amah pen <place> pai ding hi.
+    no: han skal til <place>.
+
+  - en: <name> like to go to <place>.
+    zo: <name> pen <place> ah painuam hi.
+    no: <name> liker å dra til <place>.

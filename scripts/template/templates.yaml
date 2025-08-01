@@ -1,0 +1,37 @@
+slots:
+  subject:
+    - en: "I am"
+      zo: "Ka si"
+      gloss: "1S BE"
+
+    - en: "You are"
+      zo: "Na si"
+      gloss: "2S BE"
+
+  verb:
+    - en: "coming"
+      zo: "kal"
+      gloss: "come"
+
+    - en: "going"
+      zo: "tel"
+      gloss: "go"
+
+  location:
+    - en: "home"
+      zo: "in"
+      gloss: "home"
+
+    - en: "to the market"
+      zo: "bazaar ah"
+      gloss: "market to"
+
+
+    - en: "a1"
+      zo: "b1"
+      gloss: "c1"
+
+templates:
+  - en: "{subject} {verb} {location}."
+    zo: "{subject} {location} {verb}."
+    gloss: "{subject} {location} {verb}."

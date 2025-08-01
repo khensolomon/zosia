@@ -1,0 +1,30 @@
+# ./data/templates/template_nouns.yaml
+# GOAL: Generate 20+ examples for nouns.
+# STRATEGY: Combine 5 subjects and 5 objects.
+# RESULT: 5 subjects * 5 objects = 25 parallel sentences.
+
+tags: [core, noun]
+
+subject:
+  en: ["the man", "the woman", "the boy", "the girl", "the teacher"]
+  zo: [pasalpa, numei nu, pasalno, numeino, siapi]
+  no: [mannen, kvinnen, gutten, jenta, læreren]
+
+object:
+  en: ["the house", "the book", "the car", "the school", "the tree"]
+  zo: [inn, laibu, motor, sanginn, singkung]
+  no: [huset, boken, bilen, skolen, treet]
+
+verb:
+  en: [see, look]
+  zo: [mu, en]
+  no: [ser, se]
+
+templates:
+  - en: <subject> <verb> <object>.
+    zo: <subject> in <object> a <verb>.
+    no: <subject> <verb> <object>.
+    
+  # - en: <subject> sees <object>
+  #   zo: <subject> in <object> a mu
+  #   no: <subject> ser <object>

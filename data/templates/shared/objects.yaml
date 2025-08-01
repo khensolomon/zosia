@@ -1,0 +1,12 @@
+# ./data/templates/shared/objects.yaml
+# A reusable glossary of objects that can be imported by other templates.
+
+object:
+  en: [water, "the dog", "a book", "the cat"]
+  zo: [tui, ui, "laibu khat", zawhngeu]
+  no: [vann, hunden, "en bok", katten]
+  
+# object:
+#   en: [water, "the dog", "a book", "the cat"]
+#   zo: [tui, uipa, "laibu khat", mengcha]
+#   no: [vann, hunden, "en bok", katten]

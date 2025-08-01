@@ -1,0 +1,29 @@
+subject:
+  - id: "1S"
+    features: { person: "1S" }
+    forms:
+      en: "I"
+      zo: "Ka"
+      gloss: "1S"
+
+  - id: "2S"
+    features: { person: "2S" }
+    forms:
+      en: "You"
+      zo: "Na"
+      gloss: "2S"
+
+object:
+  - id: "dog"
+    features: { animacy: "animate" }
+    forms:
+      en: "the dog"
+      zo: "ui"
+      gloss: "dog"
+
+verb:
+  - id: "see"
+    forms:
+      en: "see"
+      zo: "abc"
+      gloss: "see"

@@ -1,0 +1,32 @@
+# ./data/templates/template_adjectives.yaml
+# GOAL: Generate 30-50+ examples for adjectives.
+# STRATEGY: Combine subjects, nouns, and a list of adjectives.
+# RESULT: 3 subjects * 3 nouns * 6 adjectives = 54 parallel sentences.
+
+tags: [core, adjective]
+
+import:
+  - metadata.yaml
+  - subjects.yaml
+  - objects.yaml
+
+
+subject:
+  en: [I, you, he]
+  zo: [kei, nang, amahpa]
+  no: [jeg, du, han]
+
+noun:
+  en: [house, book, car]
+  zo: [inn, laibu, motor]
+  no: [hus, bok, bil]
+
+adjective:
+  en: [big, small, good, new, old, red]
+  zo: [a lian, a neu, a hoih, a thak, a lui, a san]
+  no: [stort, lite, bra, nytt, gammelt, rødt]
+
+templates:
+  - en: <subject> has a <adjective> <noun>.
+    zo: <subject> in <noun> <adjective> a nei.
+    no: <subject> har en <adjective> <noun>.

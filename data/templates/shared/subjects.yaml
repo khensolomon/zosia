@@ -1,0 +1,12 @@
+# ./data/templates/shared/subjects.yaml
+# A reusable glossary of subjects that can be imported by other templates.
+
+subject:
+  en: ["the man", "the woman", "the rock", I, you, he, she, we, they, "the boy", "the girl"]
+  zo: [pasalpa, numeinu, suangtum, kei, nang, amahpa, amahnu, ei, amau, pasalno, numeino]
+  no: [mannen, kvinnen, steinen, jeg, du, han, hun, vi, dere, gutt, jente]
+  
+# subject:
+#   en: ["the man", "the woman", "the rock", I, you, he, she]
+#   zo: [pasalpa, numei nu, suangtum, kei, nang, amahpa, amahnu]
+#   no: [mannen, kvinnen, steinen, jeg, du, han, hun]

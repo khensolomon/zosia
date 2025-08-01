@@ -1,14 +1,69 @@
 # ./noun-place.yaml
 # Settings noun template
 
+tags: [core, proper_nouns, place]
+
 NOUN:
-  - Vokvak
+  - Tedim
+  - Tongzang
+  - Falam
+  - Haka
+  - Nahnuai
+  - Norway
+  - Sweden
+  - India
+  - New Delhi
+  - Malaysia
+  - Myanmar
+  - Thailand
+  - USA
+  - Japan
+  - Germany
+  - Finland
+  - Denmark
 
-en:
-  - i may live in <NOUN>
+VERB:
+  en: [live, stay, work,eat,drink, go, travel, visit, sit, stand, start, write, save, begin]
+  zo: [teng, om, nasem, ne,dawn, pai, khualzin, hawh, tu, ding, kipan, at, seng, kipan]
+  no: [bo,bo,jobbe,spise,drikke, gå, reise, besøke, sitte, "helst stå", begynne, skrive, lagre, begynne]
 
-zo:
-  - kei <NOUN> teng thei mai tak
+templates:
+  - en: I may live in <NOUN>.
+    zo: kei <NOUN> ah teng thei maitak.
+    no: jeg bor kanskje i <NOUN>.
 
-no:
-  - jeg bor kanskje i <NOUN>
+  - en: I want to live in <NOUN>.
+    zo: kei <NOUN> ah teng nuam ing.
+    no: jeg vil bo i <NOUN>.
+
+  - en: I may not live in <NOUN>.
+    zo: kei <NOUN> ah teng lo thei maitak.
+    no: jeg bor kanskje ikke i <NOUN>.
+
+  - en: I don't want to live in <NOUN>.
+    zo: kei <NOUN> ah teng nuam lo.
+    no: jeg vil ikke bo i <NOUN>.
+
+  - en: I don't like <NOUN>.
+    zo: kei <NOUN> deih lo.
+    no: jeg liker ikke <NOUN>.
+
+  - en: I love <NOUN>.
+    zo: ken <NOUN> ngai.
+    no: jeg elsker <NOUN>.
+
+  - en: Where would you like to <VERB>?
+    zo: Nang koiteng ah <VERB> nuam?
+    no: Hvor vil du <VERB>?
+
+  - en: Are you from <NOUN>?
+    zo: Nang <NOUN> pan maw?
+    no: Er du fra <NOUN>?
+
+  - en: Are you traveling to <NOUN>?
+    zo: Nang <NOUN> zin ding maw?
+    no: Skal du besøke <NOUN>?
+
+  - en: Are you going to <NOUN>?
+    zo: Nang <NOUN> ah pai ding maw?
+    no: Skal du til <NOUN>?

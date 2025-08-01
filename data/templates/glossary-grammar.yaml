@@ -1,0 +1,96 @@
+# ./data/templates/glossary-grammar.yaml
+# Demonstrates advanced grammatical features like multi-conditional logic
+# and language-specific rule overrides.
+
+tags: [core, grammar]
+
+import:
+  - metadata.yaml
+  - subjects.yaml
+  - objects.yaml
+
+adjective:
+  en: [big, small, good, new, old, red]
+  zo: [a lian, a neu, a hoih, a thak, a lui, a san]
+  no: [stort, lite, bra, nytt, gammelt, rødt]
+
+noun:
+  en: [house, book, car]
+  zo: [inn, laibu, motor]
+  no: [hus, bok, bil]
+
+verb_action:
+  default:
+    en: "exists"
+    zo: "om"
+    no: "eksisterer"
+  rules:
+    on_subject_tag:
+      # This rule requires BOTH tags to be present.
+      - condition:
+          all_of: ['gender:masculine', 'person:third']
+        translations:
+          en: "acts"
+          zo: "a sem" # Hypothetical
+      # This rule requires ANY of the tags to be present.
+      - condition:
+          any_of: ['person:first', 'person:second']
+        translations:
+          en: "act"
+          zo: "sem" # Hypothetical
+      # This rule requires that NONE of the tags are present.
+      - condition:
+          none_of: ['animate']
+        translations:
+          en: "sits"
+          zo: "a om" # Hypothetical
+
+verb_simple:
+  default:
+    en: "happy"
+    zo: "lungdam"
+    no: "glad"
+  rules:
+    on_subject_tag:
+      # This rule requires BOTH tags to be present.
+      - condition:
+          all_of: [inanimate]
+        translations:
+          en: "good"
+          zo: "hoih"
+          no: "god"
+
+
+# --- 4. TEMPLATES ---
+templates:
+  - en: <subject> <verb_to_be> <verb_action>.
+    zo: <subject> <verb_action> <verb_to_be>.
+    no: <subject> <verb_to_be> <verb_action>.
+
+  # - en: <subject> <verb_to_be> <verb_simple><verb_ending>.
+  #   zo: <subject> <verb_to_be> <verb_simple><verb_ending>.
+  #   no: <subject> <verb_to_be> <verb_simple><verb_ending>.
+
+  # - en: <subject> <verb_to_be> <verb_simple>.
+  #   zo: <subject> <verb_to_be> <verb_simple>.
+  #   no: <subject> <verb_to_be> <verb_simple>.
+
+  # - en: <subject> <verb_to_be> happy.
+  #   zo: <subject> <verb_to_be> lungdam.
+  #   no: <subject> <verb_to_be> glad.
+
+  # - en: <subject> <verb_action>.
+  #   zo: <subject> <verb_action>.
+  #   no: <subject> <verb_action>.
+
+  # - en: <subject> <verb_to_have> the <adjective> <noun>.
+  #   zo: <subject> <verb_to_have> <noun> <adjective> <verb_to_be> nei.
+  #   no: <subject> <verb_to_have> <adjective> <noun>.
+
+  # - en: <subject> <verb_to_have> a <adjective> <noun><verb_ending>.
+  #   zo: <subject> <verb_to_have> <noun> <adjective> khat <verb_to_be> nei<verb_ending>.
+  #   no: <subject> <verb_to_have> <adjective> <noun><verb_ending>.
+
+  # - en: <subject> has a <adjective> <noun>.
+  #   zo: <subject> in <noun> <adjective> a nei.
+  #   no: <subject> har en <adjective> <noun>.

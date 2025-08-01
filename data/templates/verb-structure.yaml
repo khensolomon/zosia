@@ -1,0 +1,38 @@
+# ./data/templates/template_verbs.yaml
+# GOAL: Generate 50-100+ examples for verbs.
+# STRATEGY: Combine 4 subjects, 4 objects, and 4 verbs across 2 different templates.
+# RESULT: (4 subjects * 4 objects * 4 verbs) * 2 templates = 128 parallel sentences.
+
+tags: [core, verb]
+
+import:
+  - metadata.yaml
+  # - subjects.yaml
+  # - objects.yaml
+
+subject:
+  en: ["the man", "the woman", "the boy", "the girl"]
+  zo: [pasalpa, numeinu, pasalno, numeino]
+  no: [mannen, kvinnen, gutten, jenta]
+
+object:
+  en: ["the house", "the book", "the car", "the school"]
+  zo: [inn, laibu, motor, sanginn]
+  no: [huset, boken, bilen, skolen]
+
+verb:
+  en: [sees, wants, likes, builds]
+  zo: [mu, deih, lunggulh , lam]
+  no: [ser, vil ha, liker, bygger]
+
+templates:
+  # Template 1: Simple declarative sentence
+  - en: <subject> <verb> <object>.
+    zo: <subject> in <object> <verb>.
+    no: <subject> <verb> <object>.
+
+  # Template 2: A simple question
+  - en: Does <subject> <verb> <object>?
+    zo: <subject> in <object> a <verb> hiam?
+    no: <verb> <subject> <object>?
+# do i like the house?

@@ -1,0 +1,32 @@
+# ./data/templates/glossary.yaml
+# This file contains a gloss index for generating semantically aware parallel sentences.
+
+tags: [core, basic]
+
+# --- Placeholders with language-specific translations ---
+
+subject:
+  en: [I, you, "the man", dog]
+  zo: [kei, nang, pasalpa, ui]
+  no: [jeg, du, mannen, hund]
+
+verb:
+  en: [see, want, like]
+  zo: [mu, deih, lunggulh]
+  no: [ser, "vil ha", liker]
+
+object:
+  en: ["the house", "a book", water]
+  zo: [inn, "laibu khat", tui]
+  no: [huset, "en bok", vann]
+
+# --- Sentence Structure Templates ---
+
+templates:
+  # - en: <subject> <verb> <object>
+  #   zo: <subject> in <object> <verb>
+  #   no: <subject> <verb> <object>
+
+  # - en: <subject> <verb> the water
+  #   zo: <subject> in tui <verb>
+  #   no: <subject> <verb> vannet

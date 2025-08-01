@@ -1,0 +1,43 @@
+# ./mock/templates/sample_conditional_template.yaml
+# A minimal template to test the conditional logic engine, updated to use
+# the new, more robust 'rules' structure.
+tags: [test]
+
+# ./mock/templates/sample_conditional_template.yaml
+# A minimal template to test the conditional logic engine, updated to use
+# the new, more robust 'rules' structure.
+
+subject:
+  en: ["the man", "the woman"]
+  zo: [pasalpa, "numei nu"]
+
+object:
+  en: [water, "the dog"]
+  zo: [tui, uipa]
+
+metadata:
+  object:
+    water:
+      tags: [drinkable]
+    "the dog":
+      tags: [animal]
+
+verb_like:
+  default:
+    en: like
+    zo: deih
+  rules:
+    on_object_tag:
+      - condition: drinkable
+        translations:
+          en: "like to drink"
+          zo: "a dawn nuam"
+      - condition: animal
+        translations:
+          en: "like to play with"
+          zo: "a kimawl pih nuam"
+
+templates:
+  - en: <subject> <verb_like> <object>.
+    zo: <subject> in <object> <verb_like>.
+
