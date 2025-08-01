@@ -1,0 +1,9 @@
+# ./mock/corpus/datasets.yaml
+# A minimal index file for testing the data loader.
+
+train_dir: ./mock/corpus/train
+test_dir: ./mock/corpus/test
+
+en-zo:
+  train:
+    - sample
