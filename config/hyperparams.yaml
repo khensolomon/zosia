@@ -1,0 +1,20 @@
+# Default hyperparameters for the NMT model.
+# This file serves as the baseline configuration for all training runs.
+# It should not be modified directly by any script.
+
+# --- Training Settings ---
+epochs: 150               # Max number of times to loop through the entire training dataset.
+batch_size: 32            # Number of sentences to process at once for efficiency.
+learning_rate: 0.0001     # How much the model adjusts its parameters after each batch. Small values mean slower, more stable learning.
+validation_split: 0.15    # Percentage of training data (15%) to hold out for validation after each epoch.
+patience: 10              # Number of epochs to wait for improvement on the validation set before stopping the training early.
+
+# --- Model Architecture ---
+embedding_size: 256       # The size of the vector used to represent each word's meaning.
+num_heads: 4              # Number of "attention heads" or perspectives the model uses to analyze the sentence context.
+ff_hidden_size: 512       # The size of the internal "thinking" layer inside each Transformer block.
+num_layers: 3             # The depth of the model; how many Transformer blocks are stacked in the encoder and decoder.
+dropout: 0.1              # The probability (10%) of randomly ignoring a neuron during training to prevent overfitting.
+
+# --- Tokenizer Settings ---
+vocab_size: 8000          # The total number of unique words/sub-words the tokenizer will create from the training data.
