@@ -1,36 +1,18 @@
 # ./config/data.yaml
-# Configuration for data sources.
+# Configuration for data paths, sources, and indexing.
 
-sources:
-  - name: "parallel_base"
-    path: "${paths.parallel_base}"
-    # The type defaults to 'parallel' if not specified. This source contains
-    # high-quality, human-verified translations.
-    type: "parallel"
+paths:
+  # Root project directories
+  root_dir: "."
+  data_dir: "./data"
+  config_dir: "./config"
+  experiments_dir: "./experiments"
+  tmp_dir: "./tmp"
+  
+  # Subdirectories within the data directory
+  corpus_dir: "./data/corpus"
+  template_dir: "./data/templates"
+  shared_template_dir: "./data/templates/shared"
 
-  - name: "synthetic_zo-en"
-    path: "${paths.root}/data/synthetic/zo-en"
-    type: "parallel"
-    # This data was created by translating Zolai TO English (zo->en).
-    # The goal of this data is to improve the model's ability to WRITE Zolai fluently.
-    # Therefore, we only use it when Zolai is the TARGET language.
-    use_for_direction: "en-zo"
-
-  - name: "synthetic_en-zo"
-    path: "${paths.root}/data/synthetic/en-zo"
-    type: "parallel"
-    # This data was created by translating English TO Zolai (en->zo).
-    # The goal of this data is to improve the model's ability to WRITE English fluently.
-    # Therefore, we only use it when English is the TARGET language.
-    use_for_direction: "zo-en"
-    
-  - name: "templates"
-    path: "${paths.templates}"
-    # This source type tells the data loader to dynamically generate sentence
-    # pairs from YAML template files on the fly, without using extra memory.
-    type: "template"
-
-# Preprocessing settings applied to all loaded data.
-preprocessing:
-  lowercase: true
-  normalize_punctuation: true # Separates punctuation like "word." -> "word ."
+  # Index file for TSV datasets
+  datasets_index_file: "./data/corpus/datasets.yaml"

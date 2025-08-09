@@ -1,23 +1,9 @@
 # ./config/training.yaml
-# Settings for the training process.
+# Hyperparameters related to the training process.
 
-initial_training:
-  # FIX: Reduced iterations for faster testing cycles.
-  n_iterations: 2000
-  print_every: 500
-  learning_rate: 0.001 # Adam works well with a smaller learning rate
+training:
+  learning_rate: 0.0005
   batch_size: 32
-  # FIX: Added optimizer and gradient clipping settings for stability.
-  optimizer: "adam" # Can be "adam" or "sgd"
-  clip: 1.0        # Gradient clipping value. 1.0 is a common default.
-
-incremental_training:
-  n_iterations: 10000
-  print_every: 500
-  learning_rate: 0.001
-  batch_size: 32
-  optimizer: "adam"
-  clip: 1.0
-
-checkpoint:
-  filename_template: "${project_name}_{src}-{tgt}_checkpoint.pth"
+  num_epochs: 10
+  # Set to true to resume training from the last saved checkpoint
+  resume: true

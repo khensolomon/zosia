@@ -1,0 +1,20 @@
+# ./config/app.yaml
+# Core application settings and constants.
+
+# Language Configuration
+primary_language: "zo"
+supported_languages: ["zo", "en", "no"]
+
+# Special Token IDs (as per SentencePiece defaults)
+tokens:
+  pad: 0
+  sos: 1
+  eos: 2
+  unk: 3
+
+# Filename Patterns
+filenames:
+  checkpoint: "checkpoint_{lang_pair}.pt"
+  tokenizer_prefix: "tokenizer_{lang_pair}"
+  tokenizer_input: "tokenizer_input_{lang_pair}.txt"
+  eval_results: "eval_results_{lang_pair}.tsv"
