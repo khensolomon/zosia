@@ -1,6 +1,6 @@
 """
 Zolai-Centric Multilingual NMT Framework
-version: 2025.08.02.190400
+version: 2025.08.03.100000
 
 A command-line framework for training, evaluating, and deploying
 state-of-the-art Transformer-based Neural Machine Translation models, with a
@@ -8,41 +8,52 @@ focus on the Zolai language.
 
 --- Features ---
 
-Refactored for Maintainability
-  The script has been significantly refactored with a central Config class,
-  command handlers, and a model factory function to reduce boilerplate,
-  improve clarity, and make it easier to extend.
-
-Scalable Streaming Dataset
-  Implements a memory-efficient data pipeline that indexes datasets on disk
-  and streams them during training.
-
-Advanced Semantic Templates
-  The template engine supports a highly flexible YAML structure with a
-  'glossary' for parallel word lists, 'metadata' for semantic tagging, and
-  conditional placeholders for context-aware generation.
-
-Transformer Architecture
-  Uses multi-head self-attention for state-of-the-art translation quality.
+- Resumable Training: Training runs can be safely interrupted and resumed
+  from the last saved checkpoint using the `--resume` flag.
+- Refactored for Maintainability: A central Config class and command handlers
+  improve clarity and make the script easier to extend.
+- Scalable Streaming Dataset: A memory-efficient data pipeline indexes
+  datasets on disk and streams them during training.
+- Advanced Semantic Templates: A powerful template engine generates high-quality,
+  context-aware training data from YAML rule files.
+- Transformer Architecture: Uses multi-head self-attention for
+  state-of-the-art translation quality.
 
 --- CLI Usage Examples ---
 
-# 1. Data Preparation
-# (One-time step) Train a shared tokenizer for a language pair using all data sources.
-python ./scripts/nmt.py train-tokenizer --source zo --target en --use-templates --use-tsv-index
+# 1. Start a new training run
+python ./scripts/nmt.py train --source zo --target en
 
-# 2. Training
-# Train a new model using the generated tokenizer and all available data.
-# This will automatically use hyperparams-zo-en.yaml if it exists, otherwise hyperparams.yaml.
-python ./scripts/nmt.py train --source zo --target en --use-templates --use-tsv-index
+# 2. Resume an interrupted training run
+python ./scripts/nmt.py train --source zo --target en --resume
 
-# 3. Evaluation and Testing
-# Evaluate the best trained model against the defined test set.
+# 3. Evaluate the best trained model
 python ./scripts/nmt.py test --source zo --target en
 
-# 4. Translate a Single Sentence
-# Translate a single piece of text using the best trained model.
+# 4. Translate a single sentence
 python ./scripts/nmt.py translate --source zo --target en --text "Solomon in tui a dawn nuam"
+
+./config/phyperparams.yaml
+# Default hyperparameters for the NMT model.
+# This file serves as the baseline configuration for all training runs.
+# It should not be modified directly by any script.
+
+# --- Training Settings ---
+epochs: 150               # Max number of times to loop through the entire training dataset.
+batch_size: 32            # Number of sentences to process at once for efficiency.
+learning_rate: 0.0001     # How much the model adjusts its parameters after each batch. Small values mean slower, more stable learning.
+validation_split: 0.15    # Percentage of training data (15%) to hold out for validation after each epoch.
+patience: 10              # Number of epochs to wait for improvement on the validation set before stopping the training early.
+
+# --- Model Architecture ---
+embedding_size: 256       # The size of the vector used to represent each word's meaning.
+num_heads: 4              # Number of "attention heads" or perspectives the model uses to analyze the sentence context.
+ff_hidden_size: 512       # The size of the internal "thinking" layer inside each Transformer block.
+num_layers: 3             # The depth of the model; how many Transformer blocks are stacked in the encoder and decoder.
+dropout: 0.1              # The probability (10%) of randomly ignoring a neuron during training to prevent overfitting.
+
+# --- Tokenizer Settings ---
+vocab_size: 8000          # The total number of unique words/sub-words the tokenizer will create from the training data.
 """
 import os
 import io
@@ -447,24 +458,62 @@ def create_mask(src, tgt, device):
 
 # --- 4. Training & Evaluation ---
 
-def run_training_for_tuning(params, args):
-    """
-    A refactored version of the training logic that can be called by Optuna.
-    It accepts hyperparameters as an argument and returns the best validation loss.
-    """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    lang_pair = sorted([args.source, args.target])
-    tokenizer_path = os.path.join(Config.EXPERIMENTS_DIR, Config.TOKENIZER_PREFIX_PATTERN.format(src=lang_pair[0], tgt=lang_pair[1]) + ".model")
-    if not os.path.exists(tokenizer_path):
-        raise FileNotFoundError(f"Tokenizer not found at {tokenizer_path}. Please run train-tokenizer first.")
-    tokenizer = Tokenizer(tokenizer_path)
+def run_training_loop(model, optimizer, train_loader, val_loader, device, params, args, start_epoch, best_val_loss):
+    """The main training loop, now capable of resuming from a checkpoint."""
+    criterion = nn.CrossEntropyLoss(ignore_index=Config.PAD_TOKEN)
+    patience_counter = 0
 
-    data_index = build_data_index(args.source, args.target, args)
-    split_idx = int(len(data_index) * (1 - params['validation_split']))
-    train_dataset = StreamingTranslationDataset(data_index[:split_idx], tokenizer)
-    val_dataset = StreamingTranslationDataset(data_index[split_idx:], tokenizer)
+    with tqdm(range(start_epoch, params['epochs'] + 1), initial=start_epoch, total=params['epochs'], desc="Training Progress") as epoch_iterator:
+        for epoch in epoch_iterator:
+            model.train()
+            train_loss = 0
+            for src, tgt in train_loader:
+                src, tgt = src.to(device), tgt.to(device)
+                tgt_input = tgt[:, :-1]
+                src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt_input, device)
+                logits = model(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask)
+                optimizer.zero_grad()
+                tgt_out = tgt[:, 1:]
+                loss = criterion(logits.reshape(-1, logits.shape[-1]), tgt_out.reshape(-1))
+                loss.backward()
+                optimizer.step()
+                train_loss += loss.item()
+            
+            model.eval()
+            val_loss = 0
+            with torch.no_grad():
+                for src, tgt in val_loader:
+                    src, tgt = src.to(device), tgt.to(device)
+                    tgt_input = tgt[:, :-1]
+                    src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt_input, device)
+                    logits = model(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask)
+                    tgt_out = tgt[:, 1:]
+                    loss = criterion(logits.reshape(-1, logits.shape[-1]), tgt_out.reshape(-1))
+                    val_loss += loss.item()
+            
+            avg_train_loss = train_loss / len(train_loader)
+            avg_val_loss = val_loss / len(val_loader)
+            
+            if avg_val_loss < best_val_loss:
+                best_val_loss = avg_val_loss
+                patience_counter = 0
+                write_checkpoint(epoch, model, optimizer, best_val_loss, params, args)
+                epoch_iterator.set_postfix(train_loss=f"{avg_train_loss:.4f}", val_loss=f"{avg_val_loss:.4f}", best_val=f"{best_val_loss:.4f} (saved)")
+            else:
+                patience_counter += 1
+                epoch_iterator.set_postfix(train_loss=f"{avg_train_loss:.4f}", val_loss=f"{avg_val_loss:.4f}", best_val=f"{best_val_loss:.4f}")
+                if patience_counter >= params['patience']: 
+                    tqdm.write("\nEarly stopping triggered.")
+                    break
+    tqdm.write("Training complete.")
+    return best_val_loss
 
+def run_training_session(params, args, device, tokenizer):
+    """
+    Encapsulates the entire logic for a training session, including
+    model setup, data loading, and resuming from a checkpoint.
+    Returns the best validation loss achieved.
+    """
     model = Seq2SeqTransformer(
         num_encoder_layers=params['num_layers'],
         num_decoder_layers=params['num_layers'],
@@ -474,44 +523,30 @@ def run_training_for_tuning(params, args):
         ff_hidden_size=params['ff_hidden_size'],
         dropout=params['dropout']
     ).to(device)
-
-    train_loader = DataLoader(train_dataset, batch_size=params['batch_size'], shuffle=True, collate_fn=collate_fn)
-    val_loader = DataLoader(val_dataset, batch_size=params['batch_size'], shuffle=False, collate_fn=collate_fn)
-    optimizer = optim.Adam(model.parameters(), lr=params['learning_rate'], betas=(0.9, 0.98), eps=1e-9)
-    criterion = nn.CrossEntropyLoss(ignore_index=Config.PAD_TOKEN)
+    optimizer = optim.Adam(model.parameters(), lr=params['learning_rate'])
+    
+    start_epoch = 1
     best_val_loss = float('inf')
 
-    for epoch in range(1, params['epochs'] + 1):
-        model.train()
-        for src, tgt in train_loader:
-            src, tgt = src.to(device), tgt.to(device)
-            tgt_input = tgt[:, :-1]
-            src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt_input, device)
-            logits = model(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask)
-            optimizer.zero_grad()
-            tgt_out = tgt[:, 1:]
-            loss = criterion(logits.reshape(-1, logits.shape[-1]), tgt_out.reshape(-1))
-            loss.backward()
-            optimizer.step()
-        
-        model.eval()
-        val_loss = 0
-        with torch.no_grad():
-            for src, tgt in val_loader:
-                src, tgt = src.to(device), tgt.to(device)
-                tgt_input = tgt[:, :-1]
-                src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt_input, device)
-                logits = model(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask)
-                tgt_out = tgt[:, 1:]
-                loss = criterion(logits.reshape(-1, logits.shape[-1]), tgt_out.reshape(-1))
-                val_loss += loss.item()
-        
-        avg_val_loss = val_loss / len(val_loader)
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
-    
-    return best_val_loss
+    if hasattr(args, 'resume') and args.resume:
+        checkpoint = read_checkpoint(args.source, args.target, device)
+        if checkpoint:
+            model.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            start_epoch = checkpoint['epoch'] + 1
+            best_val_loss = checkpoint['best_val_loss']
+            print(f"Resuming training from epoch {start_epoch}")
+        else:
+            print("Warning: --resume flag was used, but no checkpoint was found. Starting a new training run.")
 
+    data_index = build_data_index(args.source, args.target, args)
+    split_idx = int(len(data_index) * (1 - params['validation_split']))
+    train_dataset = StreamingTranslationDataset(data_index[:split_idx], tokenizer)
+    val_dataset = StreamingTranslationDataset(data_index[split_idx:], tokenizer)
+    train_loader = DataLoader(train_dataset, batch_size=params['batch_size'], shuffle=True, collate_fn=collate_fn)
+    val_loader = DataLoader(val_dataset, batch_size=params['batch_size'], shuffle=False, collate_fn=collate_fn)
+    
+    return run_training_loop(model, optimizer, train_loader, val_loader, device, params, args, start_epoch, best_val_loss)
 
 def run_translation(model, text, tokenizer, device):
     """Translates a single text using greedy decoding."""
@@ -546,17 +581,9 @@ def run_test(model, test_pairs, tokenizer, device, source, target):
 # --- 5. Checkpointing & Config Management ---
 
 def load_hyperparams(source, target):
-    """
-    Loads hyperparameters using an inheritance model.
-    1. Loads the base `hyperparams.yaml`.
-    2. If it exists, loads the language-specific `hyperparams-{src}-{tgt}.yaml`
-       and uses its values to override the base settings.
-    """
-    # 1. Load base config
+    """Loads hyperparameters using an inheritance model."""
     with open(Config.DEFAULT_HYPERPARAMS_FILE, 'r') as f:
         params = yaml.safe_load(f)
-
-    # 2. Check for and apply language-specific overrides
     specific_path = Config.HYPERPARAMS_OUTPUT_PATTERN.format(src=source, tgt=target)
     if os.path.exists(specific_path):
         print(f"Found language-specific config. Overriding defaults from: {os.path.basename(specific_path)}")
@@ -565,27 +592,32 @@ def load_hyperparams(source, target):
         params.update(specific_params)
     else:
         print(f"Loaded hyperparameters from: {os.path.basename(Config.DEFAULT_HYPERPARAMS_FILE)}")
-
     return params
 
-def write_checkpoint(model, params, args):
-    os.makedirs(Config.EXPERIMENTS_DIR, exist_ok=True)
+def write_checkpoint(epoch, model, optimizer, best_val_loss, params, args):
+    """Saves a complete training checkpoint atomically."""
     path = os.path.join(Config.EXPERIMENTS_DIR, Config.CHECKPOINT_FILE_PATTERN.format(src=args.source, tgt=args.target))
-    # Save both model state and the hyperparameters used to train it
+    tmp_path = path + ".tmp"
+    
     torch.save({
+        'epoch': epoch,
         'model_state_dict': model.state_dict(),
-        'hyperparams': params
-    }, path)
-    return path
+        'optimizer_state_dict': optimizer.state_dict(),
+        'best_val_loss': best_val_loss,
+        'hyperparams': params,
+        'args': args
+    }, tmp_path)
+    
+    os.replace(tmp_path, path)
 
 def read_checkpoint(source, target, device, model_path=None):
+    """Loads a complete training checkpoint."""
     path = model_path or os.path.join(Config.EXPERIMENTS_DIR, Config.CHECKPOINT_FILE_PATTERN.format(src=source, tgt=target))
-    if not os.path.exists(path): return None, None
-    # Restore safe_globals for security
+    if not os.path.exists(path): return None
     with safe_globals([argparse.Namespace]):
         checkpoint = torch.load(path, map_location=device)
     print(f"Loaded checkpoint from {path}")
-    return checkpoint['model_state_dict'], checkpoint['hyperparams']
+    return checkpoint
 
 
 # --- 6. CLI Main Execution ---
@@ -604,6 +636,8 @@ def main():
         p.add_argument('--source', type=str, required=True, choices=Config.SUPPORTED_LANGUAGES)
         p.add_argument('--target', type=str, required=True, choices=Config.SUPPORTED_LANGUAGES)
     
+    train_parser.add_argument('--resume', action='store_true', help="Resume training from the last checkpoint.")
+
     for p in [train_parser, tokenizer_parser, template_test_parser]:
         p.add_argument('--use-templates', action='store_true')
     
@@ -662,16 +696,13 @@ def main():
 
         if args.command == 'train':
             params = load_hyperparams(args.source, args.target)
-            # This is a placeholder for the full training loop that would be here.
-            # We call the refactored function for clarity.
-            print("Starting training run...")
-            run_training_for_tuning(params, args)
-            print("Training run complete.")
+            run_training_session(params, args, device, tokenizer)
         
         elif args.command in ['translate', 'test']:
-            model_state, loaded_params = read_checkpoint(args.source, args.target, device, args.model_path)
-            if not model_state: sys.exit(f"Error: No checkpoint found for '{args.source}-{args.target}'.")
+            checkpoint = read_checkpoint(args.source, args.target, device, args.model_path)
+            if not checkpoint: sys.exit(f"Error: No checkpoint found for '{args.source}-{args.target}'.")
             
+            loaded_params = checkpoint['hyperparams']
             model = Seq2SeqTransformer(
                 num_encoder_layers=loaded_params['num_layers'],
                 num_decoder_layers=loaded_params['num_layers'],
@@ -681,7 +712,7 @@ def main():
                 ff_hidden_size=loaded_params['ff_hidden_size'],
                 dropout=loaded_params['dropout']
             ).to(device)
-            model.load_state_dict(model_state)
+            model.load_state_dict(checkpoint['model_state_dict'])
             
             if args.command == 'translate':
                 translation = run_translation(model, args.text, tokenizer, device)
