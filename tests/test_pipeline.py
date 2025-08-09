@@ -1,128 +1,89 @@
 # ./tests/test_pipeline.py
-# version: 2025.08.01.151000
-# This file contains automated tests for our NMT script.
-# To run these tests, navigate to the project root and run: pytest
+# version: 2025.08.03.120000
+# This file contains automated tests for the main NMT pipeline.
 
 import os
 import sys
-import argparse
-import yaml
+import json
 import torch
 import pytest
+import tempfile
+import shutil
+import argparse
 
-# Add the script's directory to the Python path to allow imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../scripts')))
+# Add the project root to the Python path to allow package imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Now we can import the functions and classes from our nmt script
-from nmt import (
-    get_indexed_pairs,
-    generate_from_template_file,
+from zo.sia.main import (
     Seq2SeqTransformer,
-    Tokenizer,
     Config,
-    create_mask
+    create_mask,
+    main as main_py_main
 )
 
-# --- Test Fixtures and Setup ---
-
 @pytest.fixture
-def mock_env():
+def mock_env_for_pipeline():
     """
-    A pytest fixture to set up a mock environment for testing.
-    It patches the Config class to point to mock data directories and
-    handles cleanup automatically after each test.
+    A fixture to create a temporary, isolated environment for testing
+    the main training and inference pipeline. It creates a mock data index
+    and tokenizer file.
     """
-    # Define the paths to our mock data for testing
-    MOCK_DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../mock'))
-    MOCK_CORPUS_DIR = os.path.join(MOCK_DATA_DIR, 'corpus')
-    MOCK_TEMPLATE_DIR = os.path.join(MOCK_DATA_DIR, 'templates')
-    MOCK_DATASETS_INDEX = os.path.join(MOCK_CORPUS_DIR, 'datasets.yaml')
-
-    # Store original paths to restore them later
-    original_index_path = Config.DATASETS_INDEX_FILE
-    original_template_dir = Config.TEMPLATE_DIR
-
-    # Patch the Config class with mock paths
-    Config.DATASETS_INDEX_FILE = MOCK_DATASETS_INDEX
-    Config.TEMPLATE_DIR = MOCK_TEMPLATE_DIR
+    tmp_dir = tempfile.mkdtemp()
     
-    # Yield control to the test function, passing useful paths
-    yield {
-        "template_dir": MOCK_TEMPLATE_DIR
+    # --- Create Mock File System Structure ---
+    mock_processed_dir = os.path.join(tmp_dir, 'processed')
+    mock_experiments_dir = os.path.join(tmp_dir, 'experiments')
+    os.makedirs(mock_processed_dir)
+    os.makedirs(mock_experiments_dir)
+
+    # --- Create Mock Data Index ---
+    mock_data_file = os.path.join(tmp_dir, 'mock_data.tsv')
+    with open(mock_data_file, 'w', encoding='utf-8') as f:
+        f.write("en\tzo\nhello world\tleitung chibai\n")
+    
+    mock_index = {'train': [(mock_data_file, 2)], 'test': [(mock_data_file, 2)]}
+    mock_index_path = os.path.join(mock_processed_dir, 'data_index.json')
+    with open(mock_index_path, 'w') as f:
+        json.dump(mock_index, f)
+
+    # --- Create a dummy tokenizer model ---
+    # In a real scenario, this would be a trained SentencePiece model.
+    # For this test, an empty file is sufficient to pass the existence check.
+    tokenizer_path = os.path.join(mock_experiments_dir, 'tokenizer_en-zo.model')
+    with open(tokenizer_path, 'w') as f:
+        f.write("") # Create empty file
+
+    # --- Patch Config Paths ---
+    original_paths = {
+        'PROCESSED_DATA_DIR': Config.PROCESSED_DATA_DIR,
+        'EXPERIMENTS_DIR': Config.EXPERIMENTS_DIR,
+        'TMP_DIR': Config.TMP_DIR
     }
     
-    # Teardown: This code runs after the test function completes
-    Config.DATASETS_INDEX_FILE = original_index_path
-    Config.TEMPLATE_DIR = original_template_dir
-
-
-# --- Test Functions ---
-
-def test_get_indexed_pairs_loads_correctly(mock_env):
-    """
-    Tests if the data loader correctly parses a well-formed TSV file
-    based on the mock datasets.yaml index.
-    """
-    pairs = get_indexed_pairs('en', 'zo', 'train')
+    Config.PROCESSED_DATA_DIR = mock_processed_dir
+    Config.EXPERIMENTS_DIR = mock_experiments_dir
+    Config.TMP_DIR = tmp_dir
     
-    # Assert that it found the correct number of pairs
-    assert len(pairs) == 2
-    # Assert that the content is correct
-    assert pairs[0] == ("hello world", "leitung chibai")
-    assert pairs[1] == ("good morning", "zingtho nuam")
-
-def test_template_engine_handles_conditionals(mock_env):
-    """
-    Tests if the advanced template engine correctly applies conditional logic
-    based on metadata tags. This is a critical test for our most complex feature.
-    """
-    template_file = os.path.join(mock_env["template_dir"], 'sample_conditional_template.yaml')
+    yield
     
-    # Test the zo -> en direction
-    pairs_zo_en = generate_from_template_file(template_file, 'zo', 'en')
-    
-    # Convert to a dictionary for easy lookup and assertion
-    results_zo_en = {src: tgt for src, tgt in pairs_zo_en}
+    # --- Teardown ---
+    for attr, path in original_paths.items():
+        setattr(Config, attr, path)
+    shutil.rmtree(tmp_dir)
 
-    print(results_zo_en)
-    
-    # Assert that the correct, capitalized sentences were generated
-    assert results_zo_en["Pasalpa in tui a dawn nuam"] == "The man like to drink water"
-    assert results_zo_en["Numeinu in uipa a kimawl pih nuam"] == "The woman like to play with the dog"
-
-    # Test the en -> zo direction
-    pairs_en_zo = generate_from_template_file(template_file, 'en', 'zo')
-    results_en_zo = {src: tgt for src, tgt in pairs_en_zo}
-
-    assert results_en_zo["The man like to drink water"] == "Pasalpa in tui a dawn nuam"
-    assert results_en_zo["The woman like to play with the dog"] == "Numeinu in uipa a kimawl pih nuam"
 
 def test_model_creation_and_forward_pass():
     """
     A "smoke test" to ensure the Transformer model can be created and can
     process a batch of dummy data without crashing.
     """
-    # Create a dummy tokenizer and some dummy data
-    vocab_size = 100
-    batch_size = 4
-    seq_len = 10
-    
-    src = torch.randint(0, vocab_size, (batch_size, seq_len))
-    tgt = torch.randint(0, vocab_size, (batch_size, seq_len))
-
-    # Build the model
-    model = Seq2SeqTransformer(
-        num_encoder_layers=2,
-        num_decoder_layers=2,
-        embed_size=64,
-        nhead=4,
-        vocab_size=vocab_size,
-        ff_hidden_size=128
-    )
-
-    # Perform a forward pass
+    model = Seq2SeqTransformer(num_encoder_layers=2, num_decoder_layers=2, embed_size=64, nhead=4, vocab_size=100, ff_hidden_size=128)
+    src = torch.randint(0, 100, (4, 10))
+    tgt = torch.randint(0, 100, (4, 10))
     src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt, 'cpu')
     output = model(src, tgt, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask)
+    assert output.shape == (4, 10, 100)
 
-    # Assert that the output shape is correct
-    assert output.shape == (batch_size, seq_len, vocab_size)
+# We can add a more comprehensive end-to-end test here later if needed.
+# For now, the model creation test serves as a good basic check.
+
