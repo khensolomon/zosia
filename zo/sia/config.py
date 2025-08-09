@@ -1,134 +1,122 @@
-# zo/sia/config.py
-#
-# What it does:
-# This module provides a single function, `load_config`, to handle all project
-# configurations. It has been updated to be more robust by loading files
-# relative to the current working directory.
-#
-# Why it's used:
-# This makes the configuration system behave like a standard command-line tool,
-# which is essential for our testing pipeline and for predictable behavior.
+"""
+Zolai-NMT Configuration Module
+version: 2025.08.08.1220
 
+Handles loading and merging of configuration from YAML files and .env overrides.
+No other script should access configuration files directly. All access must go
+through an instance of the `Config` class.
+"""
 import os
 import yaml
-from dotenv import dotenv_values
-from addict import Dict
-import re
 
-def _deep_merge(source, destination):
+class ConfigObject:
     """
-    Recursively merges source dict into destination dict.
+    A flexible, dictionary-like object that allows accessing keys as attributes.
+    This provides a cleaner syntax (e.g., `cfg.data.paths`) compared to dict
+    access (`cfg['data']['paths']`). It recursively converts nested dicts.
     """
-    for key, value in source.items():
-        if isinstance(value, dict):
-            node = destination.setdefault(key, {})
-            _deep_merge(value, node)
-        else:
-            destination[key] = value
-    return destination
+    def __init__(self, data):
+        # The __dict__ is used to store the attributes of the instance.
+        # We directly populate it from the input dictionary.
+        for key, value in data.items():
+            # Ensure keys are valid Python identifiers before setting as attributes
+            if not key.isidentifier():
+                print(f"Warning: Config key '{key}' is not a valid identifier and will be skipped for dot notation.")
+                continue
+            
+            if isinstance(value, dict):
+                # Recursively convert nested dictionaries into ConfigObjects
+                setattr(self, key, ConfigObject(value))
+            else:
+                setattr(self, key, value)
 
-def _resolve_variables(config):
+    def __repr__(self):
+        # Provides a dictionary-like representation for clarity when printing
+        return repr(self.__dict__)
+
+class Config:
     """
-    Resolves variables in the format ${path.to.key} within the config.
-    """
-    config_str = yaml.dump(config)
-    variable_pattern = re.compile(r'\$\{(.*?)\}')
+    A centralized configuration manager that loads settings from multiple YAML
+    files and allows for local overrides via a .env file.
     
-    def get_value_from_path(d, path):
-        keys = path.split('.')
-        for key in keys:
-            d = d[key]
-        return d
-
-    for match in variable_pattern.finditer(config_str):
-        path = match.group(1)
-        try:
-            resolved_value = get_value_from_path(config, path)
-            if not isinstance(resolved_value, str):
-                raise TypeError(f"Resolved value for {path} must be a string.")
-            config_str = config_str.replace(match.group(0), resolved_value)
-        except (KeyError, TypeError) as e:
-            print(f"Warning: Could not resolve variable {match.group(0)}. Error: {e}")
-
-    return yaml.safe_load(config_str)
-
-def _apply_env_overrides(config, env_file_path):
+    Configuration is accessed using dot notation, e.g., `config.data.paths.corpus_dir`.
     """
-    Applies overrides from a .env file to the configuration dictionary.
-    """
-    if not os.path.exists(env_file_path):
-        return config
+    def __init__(self, config_dir='./config', env_file='.env'):
+        # Load base configurations from YAML files
+        app_cfg = self._load_yaml(os.path.join(config_dir, 'app.yaml'))
+        data_cfg = self._load_yaml(os.path.join(config_dir, 'data.yaml'))
+        model_cfg = self._load_yaml(os.path.join(config_dir, 'model.yaml'))
 
-    overrides = dotenv_values(env_file_path)
-    for key, value in overrides.items():
-        keys = key.split('.')
-        d = config
-        for k in keys[:-1]:
-            d = d.setdefault(k, {})
-        
-        try:
-            original_val = config
-            for k_orig in keys:
-                original_val = original_val[k_orig]
-            if isinstance(original_val, (int, float, bool)):
-                 value = type(original_val)(value)
-        except (KeyError, ValueError):
-            pass
+        # Create a nested configuration structure to preserve namespaces
+        self._config = {
+            'app': app_cfg,
+            'data': data_cfg,
+            'model': model_cfg
+        }
 
-        d[keys[-1]] = value
-    return config
+        # Apply overrides from .env file if it exists
+        if os.path.exists(env_file):
+            print(f"Applying overrides from '{env_file}'...")
+            self._apply_env_overrides(env_file)
 
-def load_config():
-    """
-    Loads all configurations relative to the current working directory.
-    """
-    # FIX: Use the current working directory as the project root.
-    # This ensures that the script correctly finds the config and .env files
-    # both in regular execution and during testing.
-    root_dir = os.getcwd()
-    config_dir = os.path.join(root_dir, 'config')
-    
-    if not os.path.isdir(config_dir):
-        raise FileNotFoundError(f"Configuration directory not found at: {config_dir}")
+        # Convert the nested dictionary to a custom object for dot notation access
+        self._structured_config = ConfigObject(self._config)
 
-    # Load default.yaml as the base
-    merged_config = {}
-    default_path = os.path.join(config_dir, 'default.yaml')
-    if os.path.exists(default_path):
-        with open(default_path, 'r') as f:
-            merged_config = yaml.safe_load(f) or {}
+    def _load_yaml(self, path):
+        """Loads a single YAML file."""
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Configuration file not found: {path}")
+        with open(path, 'r', encoding='utf-8') as f:
+            return yaml.safe_load(f)
 
-    # Load other yaml files into keys named after the file
-    for filename in os.listdir(config_dir):
-        if filename.endswith((".yaml", ".yml")) and filename != 'default.yaml':
-            file_path = os.path.join(config_dir, filename)
-            config_key = os.path.splitext(filename)[0]
-            with open(file_path, 'r') as f:
-                yaml_content = yaml.safe_load(f)
-                if yaml_content:
-                    # If a key already exists, merge deeply, otherwise set it.
-                    if config_key in merged_config and isinstance(merged_config[config_key], dict):
-                         _deep_merge(yaml_content, merged_config[config_key])
-                    else:
-                        merged_config[config_key] = yaml_content
+    def _apply_env_overrides(self, env_file):
+        """Parses a .env file and updates the configuration dictionary."""
+        with open(env_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                
+                if '=' not in line:
+                    print(f"Warning: Skipping malformed line in .env: {line}")
+                    continue
 
-    # Apply .env overrides from the root directory
-    env_file_path = os.path.join(root_dir, '.env')
-    config_with_overrides = _apply_env_overrides(merged_config, env_file_path)
+                key, value = line.split('=', 1)
+                key = key.strip()
+                value = value.strip().strip('"\'') # Remove quotes
 
-    # Resolve variables
-    final_config = _resolve_variables(config_with_overrides)
+                # Convert value to appropriate type
+                if value.lower() in ['true', 'false']:
+                    value = value.lower() == 'true'
+                elif value.isdigit():
+                    value = int(value)
+                else:
+                    try:
+                        value = float(value)
+                    except ValueError:
+                        pass # Keep as string
 
-    return Dict(final_config)
+                self._set_nested_key(self._config, key, value)
 
-if __name__ == '__main__':
-    print("--- Demonstrating zo/sia/config.py ---")
-    try:
-        # To run this directly, you must be in the project's root directory
-        config = load_config()
-        print("Configuration loaded successfully!")
-        print(f"Project Name: {config.project_name}")
-        print(f"Data Sources: {config.data.sources}")
-        print(f"Using Attention: {config.model.attention}")
-    except Exception as e:
-        print(f"Error loading configuration: {e}")
+    def _set_nested_key(self, d, key_str, value):
+        """Sets a value in a nested dictionary using a dot-separated key."""
+        keys = key_str.split('.')
+        current_level = d
+        for key in keys[:-1]:
+            current_level = current_level.setdefault(key, {})
+        current_level[keys[-1]] = value
+
+    def __getattr__(self, name):
+        """Allows direct access to the top-level configuration groups."""
+        if hasattr(self._structured_config, name):
+            return getattr(self._structured_config, name)
+        raise AttributeError(f"'Config' object has no attribute '{name}'")
+
+    def get_lang_pair_config(self, source, target):
+        """
+        In the future, this can be extended to load language-pair specific
+        hyperparameter overrides from a dedicated YAML file if needed.
+        For now, it returns the base model config.
+        """
+        # Placeholder for future functionality
+        return self.model
