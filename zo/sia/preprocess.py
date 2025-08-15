@@ -1,10 +1,10 @@
 """
 Zolai-NMT Data Preprocessing Module
-version: 2025.08.08.1535
+version: 2025.08.10.0821
 
 This module contains all functions related to loading, generating, and preparing
 data for the NMT model. It handles TSV file indexing, template-based data
-generation, and preparation of data for tokenizer training.
+generation with grammatical modifiers, and tokenizer data preparation.
 """
 import os
 import io
@@ -17,6 +17,23 @@ from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
 # --- 1. Data Loading & Generation ---
+
+def deep_merge_dicts(d1, d2):
+    """
+    Recursively merges dictionary d2 into d1. List values are extended,
+    and dictionary values are recursively merged.
+    """
+    for k, v in d2.items():
+        if k in d1:
+            if isinstance(d1[k], dict) and isinstance(v, dict):
+                deep_merge_dicts(d1[k], v)
+            elif isinstance(d1[k], list) and isinstance(v, list):
+                d1[k].extend(v)
+            else:
+                d1[k] = v # d2's value overrides d1's
+        else:
+            d1[k] = v
+    return d1
 
 def get_indexed_pairs(cfg, source_lang, target_lang, data_type='train'):
     """Loads parallel data from a list of TSV files defined in datasets.yaml."""
@@ -110,14 +127,116 @@ def capitalize_sentence(sentence):
         first_word = first_word.capitalize()
     return ' '.join([first_word] + parts[1:]) if len(parts) > 1 else first_word
 
+def check_tag_condition(dependent_tags, required_condition):
+    """
+    Checks if a set of tags meets a required condition.
+    Normalizes tags by treating hyphens and colons as the same separator.
+    """
+    normalized_tags = {tag.replace('-', ':') for tag in dependent_tags}
+
+    if isinstance(required_condition, str):
+        return required_condition.replace('-', ':') in normalized_tags
+    if isinstance(required_condition, dict):
+        if 'all_of' in required_condition:
+            normalized_required = {req.replace('-', ':') for req in required_condition['all_of']}
+            return normalized_required.issubset(normalized_tags)
+        if 'any_of' in required_condition:
+            normalized_required = {req.replace('-', ':') for req in required_condition['any_of']}
+            return any(t in normalized_tags for t in normalized_required)
+        if 'none_of' in required_condition:
+            normalized_required = {req.replace('-', ':') for req in required_condition['none_of']}
+            return not any(t in normalized_tags for t in normalized_required)
+    return False
+
+def resolve_template_string(template_str, context, template_data, lang):
+    """Resolves a template string with advanced modifiers."""
+    placeholder_regex = re.compile(r"<(\w+)(?:\[([\w,]+)\])?(?:\|(\w+)(?::(\w+))?)?>")
+
+    def get_value_from_context(full_placeholder_key, language):
+        """Safely gets a value from the context, using 'en' as a primary fallback."""
+        if full_placeholder_key not in context:
+            return ""
+        data = context[full_placeholder_key]
+        value = data.get(language, data.get('en', data.get('canonical_key', '')))
+        return value
+
+    def replacer(match):
+        p_name, group, modifier, mod_arg = match.groups()
+        full_placeholder_key = f"{p_name}[{group}]" if group else p_name
+        
+        # --- Handle Modifiers ---
+        if modifier == 'form':
+            if not mod_arg: return ""
+            mod_arg_key = next((k for k in context if k.startswith(mod_arg)), None)
+            if not mod_arg_key: return ""
+
+            verb_canonical_key = context[mod_arg_key].get('canonical_key')
+            verb_metadata = (template_data.get('metadata', {}).get(mod_arg) or {}).get(verb_canonical_key) or {}
+            pronoun_group = verb_metadata.get('pronoun_group', 1)
+            
+            subject_forms = get_value_from_context(full_placeholder_key, lang)
+            if isinstance(subject_forms, list):
+                form_index = pronoun_group - 1
+                if 0 <= form_index < len(subject_forms):
+                    return subject_forms[form_index]
+            return subject_forms
+
+        elif modifier == 'plural':
+            canonical_key = context[full_placeholder_key].get('canonical_key')
+            plural_form = (template_data.get('metadata', {}).get(p_name, {}).get(canonical_key) or {}).get('plural', {}).get(lang)
+            if plural_form: return plural_form
+            
+            base_word = get_value_from_context(full_placeholder_key, lang)
+            if lang == 'en': return base_word + 's'
+            return base_word
+        
+        elif modifier == 'article':
+            if not mod_arg: return ""
+            mod_arg_key = next((k for k in context if k.startswith(mod_arg)), None)
+            if not mod_arg_key: return ""
+
+            if lang == 'en':
+                canonical_key = context[mod_arg_key].get('canonical_key')
+                tags = set((template_data.get('metadata', {}).get(mod_arg, {}).get(canonical_key) or {}).get('tags', []))
+                if 'starts_with_vowel' in tags: return "an"
+                if 'starts_with_consonant' in tags: return "a"
+                
+                word = get_value_from_context(mod_arg_key, lang)
+                return "an" if word and word.lower().startswith(('a', 'e', 'i', 'o', 'u')) else "a"
+            return ""
+
+        elif modifier == 'person':
+            if not mod_arg: return get_value_from_context(full_placeholder_key, lang)
+            mod_arg_key = next((k for k in context if k.startswith(mod_arg)), None)
+            if not mod_arg_key: return get_value_from_context(full_placeholder_key, lang)
+            
+            raw_subject_tags = context[mod_arg_key].get('tags', [])
+            subject_tags = {tag.replace('-', ':') for tag in raw_subject_tags}
+            
+            if 'person:third' in subject_tags and 'singular' in subject_tags:
+                canonical_key = context[full_placeholder_key].get('canonical_key')
+                third_person_form = (template_data.get('metadata', {}).get(p_name, {}).get(canonical_key) or {}).get('person:third_singular', {}).get(lang)
+                if third_person_form: return third_person_form
+                
+                base_verb = get_value_from_context(full_placeholder_key, lang)
+                if lang == 'en': return base_verb + 's'
+                return base_verb
+            
+            return get_value_from_context(full_placeholder_key, lang)
+
+        # --- Handle Standard Placeholders ---
+        value = get_value_from_context(full_placeholder_key, lang)
+        if isinstance(value, list): return value[0]
+        return str(value)
+
+    return placeholder_regex.sub(replacer, template_str)
+
 def generate_from_template_file(cfg, file_path, source_lang, target_lang):
-    """The core template generation logic for a single YAML file."""
     try:
         with open(file_path, 'r', encoding='utf-8') as f: template_data = yaml.safe_load(f)
     except yaml.YAMLError as e:
         print(f"Warning: Could not parse YAML file {file_path}. Error: {e}"); return []
     
-    # Handle imports from the shared template directory
     if 'import' in template_data:
         merged_data = {}
         for import_file in template_data['import']:
@@ -125,19 +244,12 @@ def generate_from_template_file(cfg, file_path, source_lang, target_lang):
             if os.path.exists(import_path):
                 with open(import_path, 'r', encoding='utf-8') as f:
                     shared_data = yaml.safe_load(f)
-                    for key, value in shared_data.items():
-                        if key not in merged_data:
-                            merged_data[key] = value
-                        elif isinstance(merged_data.get(key), list) and isinstance(value, list):
-                            merged_data[key].extend(value)
+                    deep_merge_dicts(merged_data, shared_data)
             else:
                 print(f"Warning: Imported file not found: {import_path}")
-        # Merge local data over imported data
-        for key, value in template_data.items():
-            if key in merged_data and isinstance(merged_data.get(key), list) and isinstance(value, list):
-                 merged_data[key].extend(value)
-            else:
-                 merged_data[key] = value
+        
+        local_data_to_merge = {k: v for k, v in template_data.items() if k != 'import'}
+        deep_merge_dicts(merged_data, local_data_to_merge)
         template_data = merged_data
 
     templates = template_data.get('templates', [])
@@ -148,67 +260,113 @@ def generate_from_template_file(cfg, file_path, source_lang, target_lang):
         src_template = template_pair.get(source_lang)
         tgt_template = template_pair.get(target_lang)
         if not src_template or not tgt_template: continue
+        
+        full_placeholder_regex = re.compile(r"<(\w+(?:\[[\w,]+\])?)(?:\|.*?)?>")
+        used_placeholders = sorted(list(set(full_placeholder_regex.findall(src_template + tgt_template))))
+        used_placeholders = [p for p in used_placeholders if p.split('[')[0] != 'article']
+        
+        # Separate conditional from non-conditional placeholders
+        conditional_placeholder_names = {p.split('[')[0] for p in used_placeholders if isinstance(template_data.get(p.split('[')[0]), dict) and 'default' in template_data.get(p.split('[')[0])}
+        non_conditional_placeholders = [p for p in used_placeholders if p.split('[')[0] not in conditional_placeholder_names]
 
-        placeholders = set(re.findall(r"<(\w+)>", src_template) + re.findall(r"<(\w+)>", tgt_template))
-        if not all(p in template_data for p in placeholders): continue
-        if not placeholders:
+        if not non_conditional_placeholders and not conditional_placeholder_names:
             generated_pairs.append((capitalize_sentence(src_template), capitalize_sentence(tgt_template))); continue
         
-        conditional_placeholders = {p for p in placeholders if isinstance(template_data.get(p), dict) and 'default' in template_data.get(p)}
-        non_conditional_placeholders = placeholders - conditional_placeholders
-        
-        nc_options = {}
+        all_options = []
         valid_template = True
-        for p in non_conditional_placeholders:
-            nc_options[p] = []
-            values = template_data.get(p)
-            if isinstance(values, dict) and source_lang in values and target_lang in values:
-                src_vals, tgt_vals = values[source_lang], values[target_lang]
-                canonical_keys = values.get('en', src_vals)
-                if not (len(src_vals) == len(tgt_vals) == len(canonical_keys)):
-                    valid_template = False; break
-                for i in range(len(src_vals)):
-                    metadata_key = canonical_keys[i]
-                    tags_raw = template_data.get('metadata', {}).get(p, {}).get(metadata_key, {}).get('tags', [])
-                    tags = [f"{k}:{v}" if isinstance(t, dict) else str(t) for t in tags_raw for k, v in (t.items() if isinstance(t, dict) else [(None, t)]) if v is not None]
-                    nc_options[p].append({'src': src_vals[i], 'tgt': tgt_vals[i], 'tags': tags})
+        for full_placeholder in non_conditional_placeholders:
+            match = re.match(r"(\w+)(?:\[([\w,]+)\])?", full_placeholder)
+            p_name, group_str = match.groups()
+            
+            group_filters = set(group_str.split(',')) if group_str else set()
+            
+            options_for_this_placeholder = []
+            values = template_data.get(p_name)
+            # if isinstance(values, dict):
+            #     for canonical_key, data in values.items():
+            #         if group_filters:
+            #             item_groups = data.get('group', [])
+            #             if isinstance(item_groups, str): item_groups = [item_groups]
+            #             if not group_filters.issubset(set(item_groups)):
+            #                 continue
+                    
+            #         option = data.copy()
+            #         option['canonical_key'] = canonical_key
+            #         options_for_this_placeholder.append(option)
+            # else:
+            #     valid_template = False; break
+
+            if isinstance(values, dict):
+                for canonical_key, data in values.items():
+                    # Group filtering (supports multiple groups, all required)
+                    if group_filters:
+                        item_groups = data.get('group', [])
+                        if isinstance(item_groups, str): item_groups = [item_groups]
+                        if not group_filters.issubset(set(item_groups)): continue
+
+                    option = data.copy()
+                    option['canonical_key'] = canonical_key
+
+                    # NEW: Merge in tags from metadata like the old function did
+                    md_entry = ((template_data.get('metadata', {}) or {}).get(p_name, {}) or {}).get(canonical_key, {}) or {}
+                    md_tags = md_entry.get('tags', [])
+                    if md_tags:
+                        option['tags'] = list(set(option.get('tags', [])) | set(md_tags))
+                    options_for_this_placeholder.append(option)
+            elif isinstance(values, list) and all(isinstance(v, str) for v in values):
+                # NEW: Support simple lists like the old function
+                for v in values:
+                    option = {
+                        source_lang: v,
+                        target_lang: v,
+                        'tags': [],
+                        'canonical_key': v
+                    }
+                    options_for_this_placeholder.append(option)
             else:
-                valid_template = False; break
+                valid_template = False; break            
+            
+            if not options_for_this_placeholder: valid_template = False; break
+            all_options.append(options_for_this_placeholder)
+
         if not valid_template: continue
 
-        nc_keys, nc_values = zip(*nc_options.items()) if nc_options else ([], [])
-        for combo in itertools.product(*nc_values):
-            context = {nc_keys[i]: combo[i] for i in range(len(nc_keys))}
+        # Handle case where there are only conditional placeholders
+        if not all_options and conditional_placeholder_names:
+            combos = [()]
+        else:
+            combos = itertools.product(*all_options)
+
+        for combo in combos:
+            context = {non_conditional_placeholders[i]: combo[i] for i in range(len(combo))}
             
-            for p_name in conditional_placeholders:
+            for p_name in conditional_placeholder_names:
                 p_def = template_data.get(p_name, {})
                 src_val, tgt_val = p_def['default'][source_lang], p_def['default'][target_lang]
                 
-                if 'rules' in p_def:
-                    for rule_group_key, rules in p_def['rules'].items():
-                        if rule_group_key.startswith("on_") and rule_group_key.endswith("_tag"):
-                            dependent_p_name = rule_group_key.split('_')[1]
-                            if dependent_p_name in context:
-                                dependent_tags = set(context[dependent_p_name]['tags'])
-                                for rule in rules:
-                                    condition = rule['condition']
-                                    matched = False
-                                    if isinstance(condition, str) and condition in dependent_tags: matched = True
-                                    elif isinstance(condition, dict):
-                                        if 'all_of' in condition and set(condition['all_of']).issubset(dependent_tags): matched = True
-                                        elif 'any_of' in condition and any(t in dependent_tags for t in condition['any_of']): matched = True
-                                        elif 'none_of' in condition and not any(t in dependent_tags for t in condition['none_of']): matched = True
-                                    
-                                    if matched:
-                                        src_val = rule['translations'].get(source_lang, src_val)
-                                        tgt_val = rule['translations'].get(target_lang, tgt_val)
-                                        break
-                context[p_name] = {'src': src_val, 'tgt': tgt_val}
+                for rule in p_def.get('rules', []):
+                    conditions = rule.get('conditions', {})
+                    if not conditions: continue
+                    
+                    all_conditions_met = True
+                    for dependent_p_name, required_cond in conditions.items():
+                        dep_full_key = next((k for k in context if k.startswith(dependent_p_name)), None)
+                        if not dep_full_key:
+                            all_conditions_met = False; break
+                        
+                        dependent_tags = set(context[dep_full_key].get('tags', []))
+                        if not check_tag_condition(dependent_tags, required_cond):
+                            all_conditions_met = False; break
+                    
+                    if all_conditions_met:
+                        src_val = rule['translations'].get(source_lang, src_val)
+                        tgt_val = rule['translations'].get(target_lang, tgt_val)
+                        break
+                
+                context[p_name] = {source_lang: src_val, target_lang: tgt_val, 'canonical_key': p_name}
 
-            final_src, final_tgt = src_template, tgt_template
-            for p_name, p_data in context.items():
-                final_src = final_src.replace(f"<{p_name}>", str(p_data['src']))
-                final_tgt = final_tgt.replace(f"<{p_name}>", str(p_data['tgt']))
+            final_src = resolve_template_string(src_template, context, template_data, source_lang)
+            final_tgt = resolve_template_string(tgt_template, context, template_data, target_lang)
 
             generated_pairs.append((capitalize_sentence(final_src), capitalize_sentence(final_tgt)))
             
